@@ -1,13 +1,21 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, Suspense } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { ArrivalInfo } from '@/components/station/ArrivalInfo';
 import type { RealtimeArrivalInfo } from '@/lib/odsay/types';
 import { createClient } from '@/lib/supabase/client';
 
-export default function StationDetailPage() {
+interface User {
+  id: string;
+}
+
+interface TrackingTarget {
+  bus_id: string;
+}
+
+function StationDetailContent() {
   const params = useParams();
   const searchParams = useSearchParams();
   const stationId = params.id as string;
@@ -16,7 +24,8 @@ export default function StationDetailPage() {
   const [arrivals, setArrivals] = useState<RealtimeArrivalInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [isFavorite, setIsFavorite] = useState(false);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [trackingTargets, setTrackingTargets] = useState<string[]>([]);
 
   const fetchArrivals = useCallback(async () => {
     try {
@@ -32,6 +41,21 @@ export default function StationDetailPage() {
     }
   }, [stationId]);
 
+  const fetchTrackingTargets = useCallback(async () => {
+    try {
+      const response = await fetch('/api/tracking/targets');
+      const data = await response.json();
+      const targets = data.targets || [];
+      // 현재 정류소에서 추적 중인 버스 ID 목록
+      const busIds = targets
+        .filter((t: TrackingTarget & { station_id: string }) => t.station_id === stationId)
+        .map((t: TrackingTarget) => t.bus_id);
+      setTrackingTargets(busIds);
+    } catch (error) {
+      console.error('Fetch tracking targets error:', error);
+    }
+  }, [stationId]);
+
   useEffect(() => {
     const supabase = createClient();
 
@@ -41,6 +65,8 @@ export default function StationDetailPage() {
       if (user) {
         // 즐겨찾기 여부 확인
         checkFavorite(user.id);
+        // 추적 대상 확인
+        fetchTrackingTargets();
       }
     });
 
@@ -51,7 +77,7 @@ export default function StationDetailPage() {
     const interval = setInterval(fetchArrivals, 5000);
 
     return () => clearInterval(interval);
-  }, [stationId, fetchArrivals]);
+  }, [stationId, fetchArrivals, fetchTrackingTargets]);
 
   const checkFavorite = async (userId: string) => {
     try {
@@ -93,6 +119,46 @@ export default function StationDetailPage() {
     }
   };
 
+  const toggleTracking = async (busId: string, busNo: string) => {
+    if (!user) {
+      alert('로그인이 필요합니다.');
+      return;
+    }
+
+    const isTracking = trackingTargets.includes(busId);
+
+    try {
+      if (isTracking) {
+        // 추적 대상에서 제거하려면 먼저 ID를 찾아야 함
+        const response = await fetch('/api/tracking/targets');
+        const data = await response.json();
+        const target = data.targets?.find(
+          (t: TrackingTarget & { station_id: string }) =>
+            t.bus_id === busId && t.station_id === stationId
+        );
+        if (target) {
+          await fetch(`/api/tracking/targets?id=${(target as TrackingTarget & { id: string }).id}`, {
+            method: 'DELETE',
+          });
+        }
+      } else {
+        await fetch('/api/tracking/targets', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            bus_id: busId,
+            bus_no: busNo,
+            station_id: stationId,
+            station_name: stationName,
+          }),
+        });
+      }
+      fetchTrackingTargets();
+    } catch (error) {
+      console.error('Toggle tracking error:', error);
+    }
+  };
+
   return (
     <div className="px-4 py-4">
       <div className="flex items-center justify-between mb-4">
@@ -122,7 +188,12 @@ export default function StationDetailPage() {
         </Button>
       </div>
 
-      <ArrivalInfo arrivals={arrivals} loading={loading} />
+      <ArrivalInfo
+        arrivals={arrivals}
+        loading={loading}
+        trackingTargets={trackingTargets}
+        onToggleTracking={user ? toggleTracking : undefined}
+      />
 
       {!loading && arrivals.length === 0 && (
         <p className="text-center text-slate-500 text-sm mt-4">
@@ -130,5 +201,21 @@ export default function StationDetailPage() {
         </p>
       )}
     </div>
+  );
+}
+
+export default function StationDetailPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="px-4 py-4">
+          <div className="flex justify-center py-16">
+            <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        </div>
+      }
+    >
+      <StationDetailContent />
+    </Suspense>
   );
 }
