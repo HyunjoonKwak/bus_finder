@@ -21,10 +21,10 @@ export function FilterOptions() {
           key={item.key}
           variant="outline"
           className={cn(
-            'cursor-pointer px-3 py-1.5 text-sm transition-colors',
+            'cursor-pointer px-3 py-1.5 text-sm transition-all duration-200',
             filters[item.key]
-              ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
-              : 'border-slate-200 hover:border-slate-300'
+              ? 'border-primary bg-primary/10 text-primary shadow-sm'
+              : 'border-border text-muted-foreground hover:border-primary/50 hover:bg-accent hover:text-accent-foreground'
           )}
           onClick={() => setFilters({ [item.key]: !filters[item.key] })}
         >

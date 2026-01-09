@@ -8,6 +8,8 @@ interface MapContainerProps {
   onLocationChange?: (lat: number, lng: number) => void;
 }
 
+import { cn } from '@/lib/utils';
+
 export function MapContainer({ className, onLocationChange }: MapContainerProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -71,17 +73,17 @@ export function MapContainer({ className, onLocationChange }: MapContainerProps)
 
   if (error) {
     return (
-      <div className={`flex items-center justify-center bg-slate-100 ${className}`}>
-        <p className="text-slate-500">{error}</p>
+      <div className={cn("flex items-center justify-center bg-muted", className)}>
+        <p className="text-muted-foreground">{error}</p>
       </div>
     );
   }
 
   return (
-    <div className={`relative ${className}`}>
+    <div className={cn("relative", className)}>
       {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-slate-100">
-          <p className="text-slate-500">지도를 불러오는 중입니다...</p>
+        <div className="absolute inset-0 flex items-center justify-center bg-muted">
+          <p className="text-muted-foreground">지도를 불러오는 중입니다...</p>
         </div>
       )}
       <div ref={mapRef} className="h-full w-full" />
