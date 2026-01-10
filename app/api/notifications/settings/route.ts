@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { ApiErrors, successResponse } from '@/lib/api-response';
 
 // GET: 알림 설정 목록 조회
 export async function GET() {
@@ -10,7 +11,7 @@ export async function GET() {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return ApiErrors.unauthorized('로그인이 필요합니다.');
   }
 
   const { data, error } = await supabase
@@ -20,11 +21,10 @@ export async function GET() {
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.error('Notification settings fetch error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ApiErrors.internalError('알림 설정 조회에 실패했습니다.', error.message);
   }
 
-  return NextResponse.json({ settings: data });
+  return successResponse({ settings: data });
 }
 
 // POST: 알림 설정 추가
@@ -36,10 +36,16 @@ export async function POST(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return ApiErrors.unauthorized('로그인이 필요합니다.');
   }
 
-  const body = await request.json();
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return ApiErrors.badRequest('잘못된 요청 형식입니다.');
+  }
+
   const {
     notification_type,
     target_id,
@@ -50,18 +56,11 @@ export async function POST(request: NextRequest) {
   } = body;
 
   if (!notification_type || !webhook_type || !webhook_url) {
-    return NextResponse.json(
-      { error: 'notification_type, webhook_type, webhook_url are required' },
-      { status: 400 }
-    );
+    return ApiErrors.badRequest('알림 유형, 웹훅 유형, 웹훅 URL이 필요합니다.');
   }
 
-  // 웹훅 타입 검증
   if (!['telegram', 'discord'].includes(webhook_type)) {
-    return NextResponse.json(
-      { error: 'webhook_type must be telegram or discord' },
-      { status: 400 }
-    );
+    return ApiErrors.badRequest('웹훅 유형은 telegram 또는 discord여야 합니다.');
   }
 
   const { data, error } = await supabase
@@ -80,11 +79,10 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (error) {
-    console.error('Notification setting insert error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ApiErrors.internalError('알림 설정 추가에 실패했습니다.', error.message);
   }
 
-  return NextResponse.json({ setting: data });
+  return successResponse({ setting: data }, 201);
 }
 
 // DELETE: 알림 설정 삭제
@@ -96,14 +94,14 @@ export async function DELETE(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return ApiErrors.unauthorized('로그인이 필요합니다.');
   }
 
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
 
   if (!id) {
-    return NextResponse.json({ error: 'id is required' }, { status: 400 });
+    return ApiErrors.badRequest('알림 설정 ID가 필요합니다.');
   }
 
   const { error } = await supabase
@@ -113,11 +111,10 @@ export async function DELETE(request: NextRequest) {
     .eq('user_id', user.id);
 
   if (error) {
-    console.error('Notification setting delete error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ApiErrors.internalError('알림 설정 삭제에 실패했습니다.', error.message);
   }
 
-  return NextResponse.json({ success: true });
+  return successResponse({ success: true });
 }
 
 // PATCH: 알림 설정 수정
@@ -129,14 +126,20 @@ export async function PATCH(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return ApiErrors.unauthorized('로그인이 필요합니다.');
   }
 
-  const body = await request.json();
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return ApiErrors.badRequest('잘못된 요청 형식입니다.');
+  }
+
   const { id, is_enabled, minutes_before, webhook_url } = body;
 
   if (!id) {
-    return NextResponse.json({ error: 'id is required' }, { status: 400 });
+    return ApiErrors.badRequest('알림 설정 ID가 필요합니다.');
   }
 
   const updates: Record<string, unknown> = {};
@@ -145,10 +148,7 @@ export async function PATCH(request: NextRequest) {
   if (typeof webhook_url === 'string') updates.webhook_url = webhook_url;
 
   if (Object.keys(updates).length === 0) {
-    return NextResponse.json(
-      { error: 'No valid fields to update' },
-      { status: 400 }
-    );
+    return ApiErrors.badRequest('업데이트할 필드가 없습니다.');
   }
 
   const { data, error } = await supabase
@@ -160,9 +160,8 @@ export async function PATCH(request: NextRequest) {
     .single();
 
   if (error) {
-    console.error('Notification setting update error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ApiErrors.internalError('알림 설정 업데이트에 실패했습니다.', error.message);
   }
 
-  return NextResponse.json({ setting: data });
+  return successResponse({ setting: data });
 }

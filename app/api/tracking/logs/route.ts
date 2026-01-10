@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { ApiErrors, successResponse } from '@/lib/api-response';
 
 // GET: 버스 도착 로그 조회
 export async function GET(request: NextRequest) {
@@ -10,7 +11,7 @@ export async function GET(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return ApiErrors.unauthorized('로그인이 필요합니다.');
   }
 
   const { searchParams } = new URL(request.url);
@@ -39,11 +40,10 @@ export async function GET(request: NextRequest) {
   const { data, error } = await query;
 
   if (error) {
-    console.error('Arrival logs fetch error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ApiErrors.internalError('도착 로그 조회에 실패했습니다.', error.message);
   }
 
-  return NextResponse.json({ logs: data });
+  return successResponse({ logs: data });
 }
 
 // POST: 버스 도착 로그 추가
@@ -55,21 +55,24 @@ export async function POST(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return ApiErrors.unauthorized('로그인이 필요합니다.');
   }
 
-  const body = await request.json();
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return ApiErrors.badRequest('잘못된 요청 형식입니다.');
+  }
+
   const { bus_id, bus_no, station_id, station_name, arrival_time } = body;
 
   if (!bus_id || !bus_no || !station_id || !station_name) {
-    return NextResponse.json(
-      { error: 'bus_id, bus_no, station_id, station_name are required' },
-      { status: 400 }
-    );
+    return ApiErrors.badRequest('버스 ID, 노선번호, 정류소 ID, 정류소명이 필요합니다.');
   }
 
   const arrivalDate = arrival_time ? new Date(arrival_time) : new Date();
-  const dayOfWeek = arrivalDate.getDay(); // 0=일, 1=월, ..., 6=토
+  const dayOfWeek = arrivalDate.getDay();
 
   const { data, error } = await supabase
     .from('bus_arrival_logs')
@@ -86,11 +89,10 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (error) {
-    console.error('Arrival log insert error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ApiErrors.internalError('도착 로그 추가에 실패했습니다.', error.message);
   }
 
-  return NextResponse.json({ log: data });
+  return successResponse({ log: data }, 201);
 }
 
 // DELETE: 버스 도착 로그 삭제
@@ -102,14 +104,14 @@ export async function DELETE(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return ApiErrors.unauthorized('로그인이 필요합니다.');
   }
 
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
 
   if (!id) {
-    return NextResponse.json({ error: 'id is required' }, { status: 400 });
+    return ApiErrors.badRequest('로그 ID가 필요합니다.');
   }
 
   const { error } = await supabase
@@ -119,9 +121,8 @@ export async function DELETE(request: NextRequest) {
     .eq('user_id', user.id);
 
   if (error) {
-    console.error('Arrival log delete error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ApiErrors.internalError('도착 로그 삭제에 실패했습니다.', error.message);
   }
 
-  return NextResponse.json({ success: true });
+  return successResponse({ success: true });
 }

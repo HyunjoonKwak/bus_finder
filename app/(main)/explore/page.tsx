@@ -113,6 +113,14 @@ export default function ExplorePage() {
     }
 
     initMap();
+
+    // 컴포넌트 언마운트 시 전역 툴팁 정리
+    return () => {
+      const globalTooltip = document.getElementById('explore-global-tooltip');
+      if (globalTooltip) {
+        globalTooltip.remove();
+      }
+    };
   }, []);
 
   // 지도 이동/확대 시 재검색

@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { ApiErrors, successResponse } from '@/lib/api-response';
 
 // 탑승 기록 조회
 export async function GET() {
@@ -10,7 +11,7 @@ export async function GET() {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 });
+    return ApiErrors.unauthorized('로그인이 필요합니다.');
   }
 
   const { data, error } = await supabase
@@ -20,10 +21,10 @@ export async function GET() {
     .order('boarded_at', { ascending: false });
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ApiErrors.internalError('탑승 기록 조회에 실패했습니다.', error.message);
   }
 
-  return NextResponse.json({ history: data });
+  return successResponse({ history: data });
 }
 
 // 탑승 기록 생성
@@ -35,17 +36,20 @@ export async function POST(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 });
+    return ApiErrors.unauthorized('로그인이 필요합니다.');
   }
 
-  const body = await request.json();
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return ApiErrors.badRequest('잘못된 요청 형식입니다.');
+  }
+
   const { origin_name, dest_name, route_data, total_time } = body;
 
   if (!origin_name || !dest_name) {
-    return NextResponse.json(
-      { error: '출발지와 도착지를 입력해주세요.' },
-      { status: 400 }
-    );
+    return ApiErrors.badRequest('출발지와 도착지를 입력해주세요.');
   }
 
   const { data, error } = await supabase
@@ -61,8 +65,8 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ApiErrors.internalError('탑승 기록 생성에 실패했습니다.', error.message);
   }
 
-  return NextResponse.json({ history: data });
+  return successResponse({ history: data }, 201);
 }

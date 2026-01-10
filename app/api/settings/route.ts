@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { ApiErrors, successResponse } from '@/lib/api-response';
 
 export async function GET() {
   const supabase = await createClient();
@@ -8,7 +9,7 @@ export async function GET() {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return ApiErrors.unauthorized('로그인이 필요합니다.');
   }
 
   // 설정 조회 (없으면 기본값 반환)
@@ -20,8 +21,7 @@ export async function GET() {
 
   if (error && error.code !== 'PGRST116') {
     // PGRST116 = no rows found
-    console.error('Settings fetch error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ApiErrors.internalError('설정 조회에 실패했습니다.', error.message);
   }
 
   // 설정이 없으면 기본값 반환
@@ -30,7 +30,7 @@ export async function GET() {
     bg_collection_interval: 300,
   };
 
-  return NextResponse.json({ settings });
+  return successResponse({ settings });
 }
 
 export async function POST(request: NextRequest) {
@@ -40,10 +40,16 @@ export async function POST(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return ApiErrors.unauthorized('로그인이 필요합니다.');
   }
 
-  const body = await request.json();
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return ApiErrors.badRequest('잘못된 요청 형식입니다.');
+  }
+
   const { bg_collection_enabled, bg_collection_interval } = body;
 
   // upsert: 있으면 업데이트, 없으면 생성
@@ -62,9 +68,8 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (error) {
-    console.error('Settings save error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ApiErrors.internalError('설정 저장에 실패했습니다.', error.message);
   }
 
-  return NextResponse.json({ settings: data });
+  return successResponse({ settings: data });
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { ApiErrors, successResponse } from '@/lib/api-response';
 
 // GET: 버스 추적 대상 목록 조회
 export async function GET() {
@@ -10,7 +11,7 @@ export async function GET() {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return ApiErrors.unauthorized('로그인이 필요합니다.');
   }
 
   const { data, error } = await supabase
@@ -20,11 +21,10 @@ export async function GET() {
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.error('Tracking targets fetch error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ApiErrors.internalError('추적 대상 조회에 실패했습니다.', error.message);
   }
 
-  return NextResponse.json({ targets: data });
+  return successResponse({ targets: data });
 }
 
 // POST: 버스 추적 대상 추가
@@ -36,17 +36,20 @@ export async function POST(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return ApiErrors.unauthorized('로그인이 필요합니다.');
   }
 
-  const body = await request.json();
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return ApiErrors.badRequest('잘못된 요청 형식입니다.');
+  }
+
   const { bus_id, bus_no, station_id, station_name, ars_id } = body;
 
   if (!bus_id || !bus_no || !station_id || !station_name) {
-    return NextResponse.json(
-      { error: 'bus_id, bus_no, station_id, station_name are required' },
-      { status: 400 }
-    );
+    return ApiErrors.badRequest('버스 ID, 노선번호, 정류소 ID, 정류소명이 필요합니다.');
   }
 
   const { data, error } = await supabase
@@ -57,25 +60,23 @@ export async function POST(request: NextRequest) {
       bus_no,
       station_id,
       station_name,
-      ars_id: ars_id || null, // 정류소 고유번호 (서울시/경기도 API 조회용)
+      ars_id: ars_id || null,
       is_active: true,
     })
     .select()
     .single();
 
   if (error) {
-    // 중복 추가 시도 시
     if (error.code === '23505') {
       return NextResponse.json(
-        { error: '이미 추적 중인 버스+정류소 조합입니다.' },
+        { error: '이미 추적 중인 버스+정류소 조합입니다.', code: 'DUPLICATE' },
         { status: 409 }
       );
     }
-    console.error('Tracking target insert error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ApiErrors.internalError('추적 대상 추가에 실패했습니다.', error.message);
   }
 
-  return NextResponse.json({ target: data });
+  return successResponse({ target: data }, 201);
 }
 
 // DELETE: 버스 추적 대상 삭제
@@ -87,14 +88,14 @@ export async function DELETE(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return ApiErrors.unauthorized('로그인이 필요합니다.');
   }
 
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
 
   if (!id) {
-    return NextResponse.json({ error: 'id is required' }, { status: 400 });
+    return ApiErrors.badRequest('추적 대상 ID가 필요합니다.');
   }
 
   const { error } = await supabase
@@ -104,11 +105,10 @@ export async function DELETE(request: NextRequest) {
     .eq('user_id', user.id);
 
   if (error) {
-    console.error('Tracking target delete error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ApiErrors.internalError('추적 대상 삭제에 실패했습니다.', error.message);
   }
 
-  return NextResponse.json({ success: true });
+  return successResponse({ success: true });
 }
 
 // PATCH: 버스 추적 대상 활성화/비활성화
@@ -120,17 +120,20 @@ export async function PATCH(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return ApiErrors.unauthorized('로그인이 필요합니다.');
   }
 
-  const body = await request.json();
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return ApiErrors.badRequest('잘못된 요청 형식입니다.');
+  }
+
   const { id, is_active } = body;
 
   if (!id || typeof is_active !== 'boolean') {
-    return NextResponse.json(
-      { error: 'id and is_active are required' },
-      { status: 400 }
-    );
+    return ApiErrors.badRequest('추적 대상 ID와 활성화 상태가 필요합니다.');
   }
 
   const { data, error } = await supabase
@@ -142,9 +145,8 @@ export async function PATCH(request: NextRequest) {
     .single();
 
   if (error) {
-    console.error('Tracking target update error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ApiErrors.internalError('추적 대상 업데이트에 실패했습니다.', error.message);
   }
 
-  return NextResponse.json({ target: data });
+  return successResponse({ target: data });
 }

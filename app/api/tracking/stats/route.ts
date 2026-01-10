@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { ApiErrors, successResponse } from '@/lib/api-response';
 
 interface ArrivalLog {
   id: string;
@@ -33,7 +34,7 @@ export async function GET(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return ApiErrors.unauthorized('로그인이 필요합니다.');
   }
 
   const { searchParams } = new URL(request.url);
@@ -42,10 +43,7 @@ export async function GET(request: NextRequest) {
   const days = parseInt(searchParams.get('days') || '30', 10);
 
   if (!bus_id || !station_id) {
-    return NextResponse.json(
-      { error: 'bus_id and station_id are required' },
-      { status: 400 }
-    );
+    return ApiErrors.badRequest('버스 ID와 정류소 ID가 필요합니다.');
   }
 
   const { data: logs, error } = await supabase
@@ -61,8 +59,7 @@ export async function GET(request: NextRequest) {
     .order('arrival_time', { ascending: true });
 
   if (error) {
-    console.error('Stats fetch error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ApiErrors.internalError('통계 조회에 실패했습니다.', error.message);
   }
 
   const typedLogs = logs as ArrivalLog[];
@@ -136,7 +133,6 @@ export async function GET(request: NextRequest) {
 
     // 평균 배차간격 계산 (같은 날 기록들 사이의 간격)
     if (typedLogs.length >= 2) {
-      // 날짜별로 그룹화
       const logsByDate = new Map<string, Date[]>();
       typedLogs.forEach((log) => {
         const date = new Date(log.arrival_time);
@@ -146,15 +142,12 @@ export async function GET(request: NextRequest) {
         logsByDate.set(dateKey, existing);
       });
 
-      // 각 날짜에서 연속된 기록 사이의 간격 계산
       const intervals: number[] = [];
       logsByDate.forEach((dates) => {
         if (dates.length >= 2) {
-          // 시간순 정렬
           dates.sort((a, b) => a.getTime() - b.getTime());
           for (let i = 1; i < dates.length; i++) {
             const diffMinutes = (dates[i].getTime() - dates[i - 1].getTime()) / (1000 * 60);
-            // 합리적인 범위 내의 간격만 포함 (5분 ~ 120분)
             if (diffMinutes >= 5 && diffMinutes <= 120) {
               intervals.push(diffMinutes);
             }
@@ -171,7 +164,7 @@ export async function GET(request: NextRequest) {
   // 최근 도착 기록 (최대 10개)
   const recentLogs = typedLogs.slice(-10).reverse();
 
-  return NextResponse.json({
+  return successResponse({
     stats: {
       totalCount,
       firstArrival,

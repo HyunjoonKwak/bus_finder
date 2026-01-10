@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { ApiErrors, successResponse } from '@/lib/api-response';
 
 // 즐겨찾기 노선 조회
 export async function GET() {
@@ -10,7 +11,7 @@ export async function GET() {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 });
+    return ApiErrors.unauthorized('로그인이 필요합니다.');
   }
 
   const { data, error } = await supabase
@@ -20,10 +21,10 @@ export async function GET() {
     .order('created_at', { ascending: false });
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ApiErrors.internalError('즐겨찾기 조회에 실패했습니다.', error.message);
   }
 
-  return NextResponse.json({ routes: data });
+  return successResponse({ routes: data });
 }
 
 // 즐겨찾기 노선 추가
@@ -35,17 +36,20 @@ export async function POST(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 });
+    return ApiErrors.unauthorized('로그인이 필요합니다.');
   }
 
-  const body = await request.json();
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return ApiErrors.badRequest('잘못된 요청 형식입니다.');
+  }
+
   const { bus_id, bus_no, bus_type } = body;
 
   if (!bus_id || !bus_no) {
-    return NextResponse.json(
-      { error: '버스 정보가 필요합니다.' },
-      { status: 400 }
-    );
+    return ApiErrors.badRequest('버스 정보가 필요합니다.');
   }
 
   const { data, error } = await supabase
@@ -62,14 +66,14 @@ export async function POST(request: NextRequest) {
   if (error) {
     if (error.code === '23505') {
       return NextResponse.json(
-        { error: '이미 즐겨찾기에 추가된 노선입니다.' },
+        { error: '이미 즐겨찾기에 추가된 노선입니다.', code: 'DUPLICATE' },
         { status: 409 }
       );
     }
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ApiErrors.internalError('즐겨찾기 추가에 실패했습니다.', error.message);
   }
 
-  return NextResponse.json({ route: data });
+  return successResponse({ route: data }, 201);
 }
 
 // 즐겨찾기 노선 삭제
@@ -81,17 +85,14 @@ export async function DELETE(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 });
+    return ApiErrors.unauthorized('로그인이 필요합니다.');
   }
 
   const searchParams = request.nextUrl.searchParams;
   const busId = searchParams.get('busId');
 
   if (!busId) {
-    return NextResponse.json(
-      { error: '버스 ID가 필요합니다.' },
-      { status: 400 }
-    );
+    return ApiErrors.badRequest('버스 ID가 필요합니다.');
   }
 
   const { error } = await supabase
@@ -101,8 +102,8 @@ export async function DELETE(request: NextRequest) {
     .eq('user_id', user.id);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return ApiErrors.internalError('즐겨찾기 삭제에 실패했습니다.', error.message);
   }
 
-  return NextResponse.json({ success: true });
+  return successResponse({ success: true });
 }

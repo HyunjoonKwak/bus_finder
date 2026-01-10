@@ -261,7 +261,11 @@ async function getGyeonggiStationId(mobileNo: string): Promise<string | null> {
     const stations = Array.isArray(stationList) ? stationList : [stationList];
 
     // mobileNo가 정확히 일치하는 정류소 찾기
-    const station = stations.find((s: any) => s.mobileNo?.trim() === mobileNo);
+    interface GyeonggiStation {
+      mobileNo?: string;
+      stationId?: string | number;
+    }
+    const station = stations.find((s: GyeonggiStation) => s.mobileNo?.trim() === mobileNo);
     return station?.stationId ? String(station.stationId) : null;
   } catch (error) {
     console.error('Gyeonggi station search error:', error);

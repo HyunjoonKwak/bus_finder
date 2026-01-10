@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getBusArrival } from '@/lib/publicdata/bus-arrival';
+import { NextRequest } from 'next/server';
+import { getBusArrival, BusArrivalInfo } from '@/lib/publicdata/bus-arrival';
 import { getRealtimeArrival } from '@/lib/odsay';
+import { ApiErrors, successResponse } from '@/lib/api-response';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -8,14 +9,11 @@ export async function GET(request: NextRequest) {
   const arsId = searchParams.get('arsId');
 
   if (!stationId && !arsId) {
-    return NextResponse.json(
-      { error: '정류소 ID 또는 정류소 번호가 필요합니다.' },
-      { status: 400 }
-    );
+    return ApiErrors.badRequest('정류소 ID 또는 정류소 번호가 필요합니다.');
   }
 
   try {
-    let arrivals: any[] = [];
+    let arrivals: BusArrivalInfo[] = [];
 
     // 공공데이터 API 먼저 시도 (서울시/경기도 자동 판단)
     if (arsId || stationId) {
@@ -28,12 +26,12 @@ export async function GET(request: NextRequest) {
 
       // ODSay 응답 형식 변환
       arrivals = odsayArrivals.flatMap((item) => {
-        const result = [];
+        const result: BusArrivalInfo[] = [];
 
         if (item.arrival1?.arrivalSec) {
           result.push({
             routeName: item.routeNm,
-            routeId: item.routeID,
+            routeId: String(item.routeID),
             predictTime1: Math.floor(item.arrival1.arrivalSec / 60),
             predictTimeSec1: item.arrival1.arrivalSec,
             direction: item.arrival1.busPosition,
@@ -47,12 +45,9 @@ export async function GET(request: NextRequest) {
       arrivals.sort((a, b) => (a.predictTimeSec1 || 0) - (b.predictTimeSec1 || 0));
     }
 
-    return NextResponse.json({ arrivals });
+    return successResponse({ arrivals });
   } catch (error) {
-    console.error('Bus arrival API error:', error);
-    return NextResponse.json(
-      { error: '도착 정보 조회에 실패했습니다.', detail: String(error) },
-      { status: 500 }
-    );
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return ApiErrors.internalError('도착 정보 조회에 실패했습니다.', errorMessage);
   }
 }

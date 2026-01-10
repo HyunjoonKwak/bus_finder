@@ -42,6 +42,11 @@ export async function searchStation(
   const url = `${ODSAY_API_BASE}/searchStation?lang=0&stationName=${encodeURIComponent(stationName)}&CID=${cityCode}&apiKey=${encodeURIComponent(apiKey)}`;
 
   const response = await fetch(url);
+  if (!response.ok) {
+    console.error('ODSay searchStation HTTP error:', response.status);
+    return [];
+  }
+
   const data: StationSearchResponse = await response.json();
 
   if (data.error) {
@@ -65,6 +70,11 @@ export async function searchBusLane(
   const url = `${ODSAY_API_BASE}/searchBusLane?lang=0&busNo=${encodeURIComponent(busNo)}&CID=${cityCode}&apiKey=${encodeURIComponent(apiKey)}`;
 
   const response = await fetch(url);
+  if (!response.ok) {
+    console.error('ODSay searchBusLane HTTP error:', response.status);
+    return [];
+  }
+
   const data: BusSearchResponse = await response.json();
 
   if (data.error) {
@@ -104,6 +114,11 @@ export async function searchNearbyStations(
   const url = `${ODSAY_API_BASE}/pointSearch?lang=0&x=${x}&y=${y}&radius=${radius}&apiKey=${encodeURIComponent(apiKey)}`;
 
   const response = await fetch(url);
+  if (!response.ok) {
+    console.error('ODSay pointSearch HTTP error:', response.status);
+    return [];
+  }
+
   const data: NearbyStationResponse = await response.json();
 
   if (data.error) {
@@ -113,7 +128,7 @@ export async function searchNearbyStations(
 
   // ODSay API는 distance를 반환하지 않으므로 직접 계산
   const stations = data.result?.station || [];
-  return stations.map((station: any) => ({
+  return stations.map((station) => ({
     stationID: String(station.stationID),
     stationName: station.stationName,
     x: String(station.x),
@@ -134,6 +149,11 @@ export async function getRealtimeArrival(
   const url = `${ODSAY_API_BASE}/realtimeStation?lang=0&stationID=${stationId}&apiKey=${encodeURIComponent(apiKey)}`;
 
   const response = await fetch(url);
+  if (!response.ok) {
+    console.error('ODSay realtimeStation HTTP error:', response.status);
+    return [];
+  }
+
   const data: RealtimeArrivalResponse = await response.json();
 
   if (data.error) {
@@ -157,6 +177,11 @@ export async function getBusLaneDetail(busId: string): Promise<{
   const url = `${ODSAY_API_BASE}/busLaneDetail?lang=0&busID=${busId}&apiKey=${encodeURIComponent(apiKey)}`;
 
   const response = await fetch(url);
+  if (!response.ok) {
+    console.error('ODSay busLaneDetail HTTP error:', response.status);
+    return { lane: [], stations: [], realtime: [] };
+  }
+
   const data: BusLaneDetailResponse = await response.json();
 
   if (data.error) {

@@ -1,16 +1,94 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { ApiErrors, successResponse } from '@/lib/api-response';
 
 const KAKAO_REST_API_KEY = process.env.KAKAO_REST_API_KEY;
-const ODSAY_API_KEY = process.env.ODSAY_API_KEY; // ODSay 전용 키
+const ODSAY_API_KEY = process.env.ODSAY_API_KEY;
 
 // 수도권 (서울+경기+인천) 좌표 범위
-// 서울/경기/인천 대략적인 경계: x(경도) 126.5~127.8, y(위도) 36.9~38.0
 const SEOUL_METRO_BOUNDS = {
   minX: 126.5,
   maxX: 127.8,
   minY: 36.9,
   maxY: 38.0,
 };
+
+// 카카오 장소 검색 결과 타입
+interface KakaoPlaceDocument {
+  place_name: string;
+  address_name: string;
+  x: string;
+  y: string;
+}
+
+interface KakaoSearchResponse {
+  documents: KakaoPlaceDocument[];
+}
+
+// ODSay API 타입
+interface ODSayLane {
+  busNo?: string;
+  busID?: string;
+  name?: string;
+  subwayCode?: string;
+}
+
+interface ODSaySubPath {
+  trafficType: number; // 1: 지하철, 2: 버스, 3: 도보
+  sectionTime?: number;
+  distance?: number;
+  startName?: string;
+  endName?: string;
+  stationCount?: number;
+  lane?: ODSayLane[];
+}
+
+interface ODSayPathInfo {
+  totalTime: number;
+  totalDistance: number;
+  payment: number;
+  pathType: number;
+}
+
+interface ODSayPath {
+  info: ODSayPathInfo;
+  subPath: ODSaySubPath[];
+}
+
+interface ODSayResult {
+  result?: {
+    path?: ODSayPath[];
+  };
+  error?: {
+    code?: number;
+    message?: string;
+  };
+}
+
+// 경로 Leg 타입
+interface RouteLeg {
+  mode: 'walk' | 'bus' | 'subway';
+  duration: number;
+  distance?: number;
+  routeName?: string;
+  routeId?: string | number;
+  startName: string;
+  endName: string;
+  stationCount?: number;
+}
+
+// 경로 타입
+interface Route {
+  id: string;
+  origin: { name: string };
+  destination: { name: string };
+  totalTime: number;
+  totalDistance?: number;
+  walkTime: number;
+  transferCount: number;
+  fare: number;
+  legs: RouteLeg[];
+  pathType: number;
+}
 
 // 수도권 내 좌표인지 확인
 function isInSeoulMetro(lng: number, lat: number): boolean {
@@ -25,7 +103,6 @@ function isInSeoulMetro(lng: number, lat: number): boolean {
 // 카카오 주소 검색으로 좌표 가져오기 (수도권 우선)
 async function getCoordinates(address: string): Promise<{ lat: number; lng: number; placeName: string } | null> {
   try {
-    // 수도권 중심 좌표 (서울시청 기준)로 검색 - radius 제거 (최대 20000m 제한)
     const response = await fetch(
       `https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(address)}&x=126.978&y=37.5665&sort=distance`,
       {
@@ -40,10 +117,9 @@ async function getCoordinates(address: string): Promise<{ lat: number; lng: numb
       return null;
     }
 
-    const data = await response.json();
+    const data: KakaoSearchResponse = await response.json();
     if (data.documents && data.documents.length > 0) {
-      // 수도권 내 결과 우선 선택
-      const seoulMetroResult = data.documents.find((doc: any) => {
+      const seoulMetroResult = data.documents.find((doc: KakaoPlaceDocument) => {
         const lng = parseFloat(doc.x);
         const lat = parseFloat(doc.y);
         return isInSeoulMetro(lng, lat);
@@ -53,7 +129,6 @@ async function getCoordinates(address: string): Promise<{ lat: number; lng: numb
       const lng = parseFloat(doc.x);
       const lat = parseFloat(doc.y);
 
-      // 수도권 외 결과인 경우 경고 로그
       if (!isInSeoulMetro(lng, lat)) {
         console.warn(`검색 결과가 수도권 외 지역입니다: ${doc.place_name} (${doc.address_name})`);
       }
@@ -77,16 +152,17 @@ async function searchTransitRoute(
   startY: number,
   endX: number,
   endY: number
-) {
+): Promise<ODSayResult | null> {
   try {
     const url = `https://api.odsay.com/v1/api/searchPubTransPathT?SX=${startX}&SY=${startY}&EX=${endX}&EY=${endY}&apiKey=${encodeURIComponent(ODSAY_API_KEY || '')}`;
 
-    console.log('ODSay API request:', url.replace(ODSAY_API_KEY || '', '***'));
-
     const response = await fetch(url);
-    const data = await response.json();
+    if (!response.ok) {
+      console.error('ODSay API HTTP error:', response.status);
+      return null;
+    }
 
-    console.log('ODSay API response:', JSON.stringify(data).substring(0, 200));
+    const data: ODSayResult = await response.json();
 
     if (data.error || !data.result) {
       console.error('ODSay API error:', data.error || 'No result');
@@ -101,59 +177,58 @@ async function searchTransitRoute(
 }
 
 // ODSay 결과를 앱 형식으로 변환
-function transformODSayResult(data: any, originName: string, destName: string) {
+function transformODSayResult(data: ODSayResult, originName: string, destName: string): Route[] {
   if (!data?.result?.path) {
     return [];
   }
 
-  return data.result.path.map((path: any, index: number) => {
+  return data.result.path.map((path: ODSayPath, index: number) => {
     const info = path.info;
     const subPaths = path.subPath || [];
 
-    // legs 변환
-    const legs = subPaths.map((sub: any) => {
-      const trafficType = sub.trafficType; // 1: 지하철, 2: 버스, 3: 도보
+    const legs: RouteLeg[] = subPaths
+      .map((sub: ODSaySubPath): RouteLeg | null => {
+        const trafficType = sub.trafficType;
 
-      if (trafficType === 3) {
-        return {
-          mode: 'walk',
-          duration: sub.sectionTime,
-          distance: sub.distance,
-          startName: sub.startName || '출발',
-          endName: sub.endName || '도착',
-        };
-      } else if (trafficType === 2) {
-        return {
-          mode: 'bus',
-          duration: sub.sectionTime,
-          routeName: sub.lane?.[0]?.busNo || '버스',
-          routeId: sub.lane?.[0]?.busID,
-          startName: sub.startName,
-          endName: sub.endName,
-          stationCount: sub.stationCount,
-        };
-      } else if (trafficType === 1) {
-        return {
-          mode: 'subway',
-          duration: sub.sectionTime,
-          routeName: sub.lane?.[0]?.name || '지하철',
-          routeId: sub.lane?.[0]?.subwayCode,
-          startName: sub.startName,
-          endName: sub.endName,
-          stationCount: sub.stationCount,
-        };
-      }
-      return null;
-    }).filter(Boolean);
+        if (trafficType === 3) {
+          return {
+            mode: 'walk',
+            duration: sub.sectionTime || 0,
+            distance: sub.distance,
+            startName: sub.startName || '출발',
+            endName: sub.endName || '도착',
+          };
+        } else if (trafficType === 2) {
+          return {
+            mode: 'bus',
+            duration: sub.sectionTime || 0,
+            routeName: sub.lane?.[0]?.busNo || '버스',
+            routeId: sub.lane?.[0]?.busID,
+            startName: sub.startName || '',
+            endName: sub.endName || '',
+            stationCount: sub.stationCount,
+          };
+        } else if (trafficType === 1) {
+          return {
+            mode: 'subway',
+            duration: sub.sectionTime || 0,
+            routeName: sub.lane?.[0]?.name || '지하철',
+            routeId: sub.lane?.[0]?.subwayCode,
+            startName: sub.startName || '',
+            endName: sub.endName || '',
+            stationCount: sub.stationCount,
+          };
+        }
+        return null;
+      })
+      .filter((leg): leg is RouteLeg => leg !== null);
 
-    // 도보 시간 계산
     const walkTime = subPaths
-      .filter((sub: any) => sub.trafficType === 3)
-      .reduce((acc: number, sub: any) => acc + (sub.sectionTime || 0), 0);
+      .filter((sub: ODSaySubPath) => sub.trafficType === 3)
+      .reduce((acc: number, sub: ODSaySubPath) => acc + (sub.sectionTime || 0), 0);
 
-    // 환승 횟수 계산
     const transferCount = subPaths.filter(
-      (sub: any) => sub.trafficType === 1 || sub.trafficType === 2
+      (sub: ODSaySubPath) => sub.trafficType === 1 || sub.trafficType === 2
     ).length - 1;
 
     return {
@@ -166,13 +241,13 @@ function transformODSayResult(data: any, originName: string, destName: string) {
       transferCount: Math.max(0, transferCount),
       fare: info.payment,
       legs,
-      pathType: info.pathType, // 1: 지하철, 2: 버스, 3: 버스+지하철
+      pathType: info.pathType,
     };
   });
 }
 
 // 모의 데이터 생성
-function getMockRoutes(origin: string, dest: string) {
+function getMockRoutes(origin: string, dest: string): Route[] {
   return [
     {
       id: '1',
@@ -229,35 +304,26 @@ export async function GET(request: NextRequest) {
   const origin = searchParams.get('origin');
   const dest = searchParams.get('dest');
 
-  // 직접 좌표가 전달된 경우
   const sx = searchParams.get('sx');
   const sy = searchParams.get('sy');
   const ex = searchParams.get('ex');
   const ey = searchParams.get('ey');
 
   if (!origin || !dest) {
-    return NextResponse.json(
-      { error: '출발지와 도착지를 입력해주세요.' },
-      { status: 400 }
-    );
+    return ApiErrors.badRequest('출발지와 도착지를 입력해주세요.');
   }
 
-  // ODSay API 키가 없으면 모의 데이터 반환
   if (!ODSAY_API_KEY) {
-    console.log('ODSay API key not configured, returning mock data');
-    return NextResponse.json({ routes: getMockRoutes(origin, dest) });
+    return successResponse({ routes: getMockRoutes(origin, dest) });
   }
 
-  // 카카오 REST API 키가 없으면 모의 데이터 반환
   if (!KAKAO_REST_API_KEY) {
-    console.log('Kakao REST API key not configured, returning mock data');
-    return NextResponse.json({ routes: getMockRoutes(origin, dest) });
+    return successResponse({ routes: getMockRoutes(origin, dest) });
   }
 
   let originCoords: { lat: number; lng: number; placeName: string } | null = null;
   let destCoords: { lat: number; lng: number; placeName: string } | null = null;
 
-  // 직접 좌표가 전달된 경우 사용
   if (sx && sy) {
     const lng = parseFloat(sx);
     const lat = parseFloat(sy);
@@ -274,7 +340,6 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // 좌표가 없으면 지오코딩으로 가져오기
   if (!originCoords || !destCoords) {
     const [fetchedOrigin, fetchedDest] = await Promise.all([
       originCoords ? Promise.resolve(originCoords) : getCoordinates(origin),
@@ -286,11 +351,9 @@ export async function GET(request: NextRequest) {
   }
 
   if (!originCoords || !destCoords) {
-    console.log('Could not get coordinates, returning mock data');
-    return NextResponse.json({ routes: getMockRoutes(origin, dest) });
+    return successResponse({ routes: getMockRoutes(origin, dest) });
   }
 
-  // 수도권 외 검색 결과인 경우 에러 반환
   if (!isInSeoulMetro(originCoords.lng, originCoords.lat)) {
     return NextResponse.json(
       {
@@ -311,9 +374,6 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  console.log(`검색: ${originCoords.placeName} → ${destCoords.placeName}`);
-
-  // ODSay 경로 검색
   const odsayResult = await searchTransitRoute(
     originCoords.lng,
     originCoords.lat,
@@ -322,18 +382,16 @@ export async function GET(request: NextRequest) {
   );
 
   if (!odsayResult) {
-    console.log('ODSay search failed, returning mock data');
-    return NextResponse.json({ routes: getMockRoutes(origin, dest) });
+    return successResponse({ routes: getMockRoutes(origin, dest) });
   }
 
-  // 결과 변환 - 실제 매칭된 장소 이름 사용
   const routes = transformODSayResult(odsayResult, originCoords.placeName, destCoords.placeName);
 
   if (routes.length === 0) {
-    return NextResponse.json({ routes: getMockRoutes(origin, dest) });
+    return successResponse({ routes: getMockRoutes(origin, dest) });
   }
 
-  return NextResponse.json({
+  return successResponse({
     routes,
     matchedOrigin: originCoords.placeName,
     matchedDest: destCoords.placeName,
