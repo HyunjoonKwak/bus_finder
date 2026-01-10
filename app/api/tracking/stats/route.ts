@@ -116,6 +116,7 @@ export async function GET(request: NextRequest) {
   const totalCount = typedLogs.length;
   let firstArrival: string | null = null;
   let lastArrival: string | null = null;
+  let avgInterval: number | null = null;
 
   if (typedLogs.length > 0) {
     const times = typedLogs.map((log) => {
@@ -132,6 +133,39 @@ export async function GET(request: NextRequest) {
 
     firstArrival = `${minH.toString().padStart(2, '0')}:${minM.toString().padStart(2, '0')}`;
     lastArrival = `${maxH.toString().padStart(2, '0')}:${maxM.toString().padStart(2, '0')}`;
+
+    // 평균 배차간격 계산 (같은 날 기록들 사이의 간격)
+    if (typedLogs.length >= 2) {
+      // 날짜별로 그룹화
+      const logsByDate = new Map<string, Date[]>();
+      typedLogs.forEach((log) => {
+        const date = new Date(log.arrival_time);
+        const dateKey = date.toISOString().split('T')[0];
+        const existing = logsByDate.get(dateKey) || [];
+        existing.push(date);
+        logsByDate.set(dateKey, existing);
+      });
+
+      // 각 날짜에서 연속된 기록 사이의 간격 계산
+      const intervals: number[] = [];
+      logsByDate.forEach((dates) => {
+        if (dates.length >= 2) {
+          // 시간순 정렬
+          dates.sort((a, b) => a.getTime() - b.getTime());
+          for (let i = 1; i < dates.length; i++) {
+            const diffMinutes = (dates[i].getTime() - dates[i - 1].getTime()) / (1000 * 60);
+            // 합리적인 범위 내의 간격만 포함 (5분 ~ 120분)
+            if (diffMinutes >= 5 && diffMinutes <= 120) {
+              intervals.push(diffMinutes);
+            }
+          }
+        }
+      });
+
+      if (intervals.length > 0) {
+        avgInterval = Math.round(intervals.reduce((a, b) => a + b, 0) / intervals.length);
+      }
+    }
   }
 
   // 최근 도착 기록 (최대 10개)
@@ -142,6 +176,7 @@ export async function GET(request: NextRequest) {
       totalCount,
       firstArrival,
       lastArrival,
+      avgInterval,
       byDay,
       byHour,
       recentLogs,

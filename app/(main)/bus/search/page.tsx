@@ -17,7 +17,7 @@ export default function BusSearchPage() {
 
   return (
     <div className="px-4 py-4">
-      <h1 className="text-xl font-bold text-slate-900 mb-4">버스 노선 검색</h1>
+      <h1 className="text-xl font-bold text-foreground mb-4">버스 노선 검색</h1>
 
       <BusSearchInput
         onSelect={handleSelect}
@@ -27,7 +27,7 @@ export default function BusSearchPage() {
 
       {hasSearched && searchResults.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16">
-          <p className="text-slate-500">검색 결과가 없습니다.</p>
+          <p className="text-muted-foreground">검색 결과가 없습니다.</p>
         </div>
       )}
 
@@ -46,7 +46,7 @@ export default function BusSearchPage() {
       {!hasSearched && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <svg
-            className="w-16 h-16 text-slate-300 mb-4"
+            className="w-16 h-16 text-muted-foreground/50 mb-4"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -58,7 +58,7 @@ export default function BusSearchPage() {
               d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
             />
           </svg>
-          <p className="text-slate-500">
+          <p className="text-muted-foreground">
             버스 번호를 검색하여<br />
             노선 정보를 확인하세요
           </p>

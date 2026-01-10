@@ -39,7 +39,7 @@ export function BusSearchInput({
       setLoading(true);
       try {
         const response = await fetch(
-          `/api/odsay/bus/search?q=${encodeURIComponent(query)}`
+          `/api/bus/search?q=${encodeURIComponent(query)}`
         );
         const data = await response.json();
         setResults(data.buses || []);

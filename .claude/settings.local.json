@@ -13,7 +13,16 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git remote add:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(curl:*)",
+      "Bash(grep:*)",
+      "Bash(lsof:*)",
+      "Bash(xargs kill:*)",
+      "Bash(python3:*)",
+      "Bash(source /Users/specialrisk_mac/code_work/bus_finder/.env.local)",
+      "Bash(npx tsc:*)",
+      "Bash(tail:*)",
+      "Bash(wc:*)"
     ]
   }
 }

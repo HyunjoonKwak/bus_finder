@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { searchNearbyStations } from '@/lib/odsay';
+import { searchNearbyStations } from '@/lib/publicdata/bus-station';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -20,7 +20,18 @@ export async function GET(request: NextRequest) {
       parseFloat(y),
       parseInt(radius)
     );
-    return NextResponse.json({ stations });
+
+    // 프론트엔드 형식에 맞게 변환
+    const formattedStations = stations.map((s) => ({
+      stationID: s.stationId,
+      stationName: s.stationName,
+      arsID: s.arsId,
+      x: s.x,
+      y: s.y,
+      distance: s.distance || 0,
+    }));
+
+    return NextResponse.json({ stations: formattedStations });
   } catch (error) {
     console.error('Nearby stations error:', error);
     return NextResponse.json(

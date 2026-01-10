@@ -28,16 +28,6 @@ export default function SettingsPage() {
       ),
     },
     {
-      title: '출퇴근 경로',
-      description: '자주 이용하는 출퇴근 경로 관리',
-      href: '/commute',
-      icon: (
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        </svg>
-      ),
-    },
-    {
       title: '메모',
       description: '탑승 메모 관리',
       href: '/memo',
@@ -51,24 +41,24 @@ export default function SettingsPage() {
 
   return (
     <div className="px-4 py-4">
-      <h1 className="text-xl font-bold text-slate-900 mb-4">설정</h1>
+      <h1 className="text-xl font-bold text-foreground mb-4">설정</h1>
 
       <div className="space-y-3">
         {menuItems.map((item) => (
           <Card
             key={item.href}
-            className="p-4 cursor-pointer hover:bg-slate-50 transition-colors"
+            className="p-4 cursor-pointer hover:bg-accent transition-colors"
             onClick={() => router.push(item.href)}
           >
             <div className="flex items-center gap-4">
-              <div className="flex-shrink-0 w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600">
+              <div className="flex-shrink-0 w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center text-primary">
                 {item.icon}
               </div>
               <div className="flex-1">
-                <h3 className="font-medium text-slate-900">{item.title}</h3>
-                <p className="text-sm text-slate-500">{item.description}</p>
+                <h3 className="font-medium text-foreground">{item.title}</h3>
+                <p className="text-sm text-muted-foreground">{item.description}</p>
               </div>
-              <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </div>

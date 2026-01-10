@@ -3,11 +3,31 @@ import { NextRequest, NextResponse } from 'next/server';
 const KAKAO_REST_API_KEY = process.env.KAKAO_REST_API_KEY;
 const ODSAY_API_KEY = process.env.ODSAY_API_KEY; // ODSay 전용 키
 
-// 카카오 주소 검색으로 좌표 가져오기
-async function getCoordinates(address: string): Promise<{ lat: number; lng: number } | null> {
+// 수도권 (서울+경기+인천) 좌표 범위
+// 서울/경기/인천 대략적인 경계: x(경도) 126.5~127.8, y(위도) 36.9~38.0
+const SEOUL_METRO_BOUNDS = {
+  minX: 126.5,
+  maxX: 127.8,
+  minY: 36.9,
+  maxY: 38.0,
+};
+
+// 수도권 내 좌표인지 확인
+function isInSeoulMetro(lng: number, lat: number): boolean {
+  return (
+    lng >= SEOUL_METRO_BOUNDS.minX &&
+    lng <= SEOUL_METRO_BOUNDS.maxX &&
+    lat >= SEOUL_METRO_BOUNDS.minY &&
+    lat <= SEOUL_METRO_BOUNDS.maxY
+  );
+}
+
+// 카카오 주소 검색으로 좌표 가져오기 (수도권 우선)
+async function getCoordinates(address: string): Promise<{ lat: number; lng: number; placeName: string } | null> {
   try {
+    // 수도권 중심 좌표 (서울시청 기준)로 검색 - radius 제거 (최대 20000m 제한)
     const response = await fetch(
-      `https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(address)}`,
+      `https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(address)}&x=126.978&y=37.5665&sort=distance`,
       {
         headers: {
           Authorization: `KakaoAK ${KAKAO_REST_API_KEY}`,
@@ -22,10 +42,26 @@ async function getCoordinates(address: string): Promise<{ lat: number; lng: numb
 
     const data = await response.json();
     if (data.documents && data.documents.length > 0) {
-      const doc = data.documents[0];
+      // 수도권 내 결과 우선 선택
+      const seoulMetroResult = data.documents.find((doc: any) => {
+        const lng = parseFloat(doc.x);
+        const lat = parseFloat(doc.y);
+        return isInSeoulMetro(lng, lat);
+      });
+
+      const doc = seoulMetroResult || data.documents[0];
+      const lng = parseFloat(doc.x);
+      const lat = parseFloat(doc.y);
+
+      // 수도권 외 결과인 경우 경고 로그
+      if (!isInSeoulMetro(lng, lat)) {
+        console.warn(`검색 결과가 수도권 외 지역입니다: ${doc.place_name} (${doc.address_name})`);
+      }
+
       return {
-        lat: parseFloat(doc.y),
-        lng: parseFloat(doc.x),
+        lat,
+        lng,
+        placeName: doc.place_name,
       };
     }
     return null;
@@ -193,6 +229,12 @@ export async function GET(request: NextRequest) {
   const origin = searchParams.get('origin');
   const dest = searchParams.get('dest');
 
+  // 직접 좌표가 전달된 경우
+  const sx = searchParams.get('sx');
+  const sy = searchParams.get('sy');
+  const ex = searchParams.get('ex');
+  const ey = searchParams.get('ey');
+
   if (!origin || !dest) {
     return NextResponse.json(
       { error: '출발지와 도착지를 입력해주세요.' },
@@ -212,16 +254,64 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ routes: getMockRoutes(origin, dest) });
   }
 
-  // 출발지/도착지 좌표 가져오기
-  const [originCoords, destCoords] = await Promise.all([
-    getCoordinates(origin),
-    getCoordinates(dest),
-  ]);
+  let originCoords: { lat: number; lng: number; placeName: string } | null = null;
+  let destCoords: { lat: number; lng: number; placeName: string } | null = null;
+
+  // 직접 좌표가 전달된 경우 사용
+  if (sx && sy) {
+    const lng = parseFloat(sx);
+    const lat = parseFloat(sy);
+    if (!isNaN(lng) && !isNaN(lat)) {
+      originCoords = { lat, lng, placeName: origin };
+    }
+  }
+
+  if (ex && ey) {
+    const lng = parseFloat(ex);
+    const lat = parseFloat(ey);
+    if (!isNaN(lng) && !isNaN(lat)) {
+      destCoords = { lat, lng, placeName: dest };
+    }
+  }
+
+  // 좌표가 없으면 지오코딩으로 가져오기
+  if (!originCoords || !destCoords) {
+    const [fetchedOrigin, fetchedDest] = await Promise.all([
+      originCoords ? Promise.resolve(originCoords) : getCoordinates(origin),
+      destCoords ? Promise.resolve(destCoords) : getCoordinates(dest),
+    ]);
+
+    if (!originCoords) originCoords = fetchedOrigin;
+    if (!destCoords) destCoords = fetchedDest;
+  }
 
   if (!originCoords || !destCoords) {
     console.log('Could not get coordinates, returning mock data');
     return NextResponse.json({ routes: getMockRoutes(origin, dest) });
   }
+
+  // 수도권 외 검색 결과인 경우 에러 반환
+  if (!isInSeoulMetro(originCoords.lng, originCoords.lat)) {
+    return NextResponse.json(
+      {
+        error: `"${origin}"에 대한 수도권 내 검색 결과가 없습니다. 더 정확한 주소를 입력해주세요.`,
+        matchedPlace: originCoords.placeName,
+      },
+      { status: 400 }
+    );
+  }
+
+  if (!isInSeoulMetro(destCoords.lng, destCoords.lat)) {
+    return NextResponse.json(
+      {
+        error: `"${dest}"에 대한 수도권 내 검색 결과가 없습니다. 더 정확한 주소를 입력해주세요.`,
+        matchedPlace: destCoords.placeName,
+      },
+      { status: 400 }
+    );
+  }
+
+  console.log(`검색: ${originCoords.placeName} → ${destCoords.placeName}`);
 
   // ODSay 경로 검색
   const odsayResult = await searchTransitRoute(
@@ -236,12 +326,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ routes: getMockRoutes(origin, dest) });
   }
 
-  // 결과 변환
-  const routes = transformODSayResult(odsayResult, origin, dest);
+  // 결과 변환 - 실제 매칭된 장소 이름 사용
+  const routes = transformODSayResult(odsayResult, originCoords.placeName, destCoords.placeName);
 
   if (routes.length === 0) {
     return NextResponse.json({ routes: getMockRoutes(origin, dest) });
   }
 
-  return NextResponse.json({ routes });
+  return NextResponse.json({
+    routes,
+    matchedOrigin: originCoords.placeName,
+    matchedDest: destCoords.placeName,
+  });
 }

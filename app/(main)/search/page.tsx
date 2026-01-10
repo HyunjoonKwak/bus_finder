@@ -1,40 +1,117 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useState, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { SearchForm } from '@/components/search/SearchForm';
+import { cn } from '@/lib/utils';
+import { useSearchStore } from '@/lib/store';
+import { loadKakaoMapScript, getCurrentPosition } from '@/lib/kakao';
+
+interface RouteLeg {
+  mode: string;
+  duration: number;
+  routeName?: string;
+  routeId?: string;
+  startName: string;
+  endName: string;
+  stationCount?: number;
+  distance?: number;
+}
 
 interface RouteResult {
   id: string;
-  origin: { name: string };
-  destination: { name: string };
+  origin: { name: string; x?: number; y?: number };
+  destination: { name: string; x?: number; y?: number };
   totalTime: number;
+  totalDistance?: number;
   walkTime: number;
   transferCount: number;
   fare: number;
-  legs: Array<{
-    mode: string;
-    duration: number;
-    routeName?: string;
-    startName: string;
-    endName: string;
-    stationCount?: number;
-  }>;
+  legs: RouteLeg[];
   pathType?: number;
 }
 
-function SearchResults() {
+interface SearchResponse {
+  routes: RouteResult[];
+  matchedOrigin?: string;
+  matchedDest?: string;
+  error?: string;
+}
+
+type TabType = 'search' | 'recent';
+
+function SearchContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { recentSearches } = useSearchStore();
   const origin = searchParams.get('origin');
   const dest = searchParams.get('dest');
 
+  const mapRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<any>(null);
+
   const [routes, setRoutes] = useState<RouteResult[]>([]);
+  const [matchedPlaces, setMatchedPlaces] = useState<{ origin?: string; dest?: string }>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedRoute, setSelectedRoute] = useState<RouteResult | null>(null);
+  const [isPanelOpen, setIsPanelOpen] = useState(true);
+  const [mapLoaded, setMapLoaded] = useState(false);
+  const [activeTab, setActiveTab] = useState<TabType>('search');
+  const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
 
+  // 지도 초기화
+  useEffect(() => {
+    async function initMap() {
+      try {
+        await loadKakaoMapScript();
+
+        let lat = 37.5665;
+        let lng = 126.978;
+
+        try {
+          const position = await getCurrentPosition();
+          lat = position.coords.latitude;
+          lng = position.coords.longitude;
+        } catch {
+          console.log('현재 위치를 가져올 수 없습니다.');
+        }
+
+        setCurrentLocation({ lat, lng });
+
+        if (!mapRef.current) return;
+
+        const kakao = window.kakao;
+        const map = new kakao.maps.Map(mapRef.current, {
+          center: new kakao.maps.LatLng(lat, lng),
+          level: 7,
+        });
+        mapInstanceRef.current = map;
+
+        // 현재 위치 마커
+        const markerContent = `
+          <div style="position: relative;">
+            <div style="width: 16px; height: 16px; background: #3B82F6; border: 3px solid white; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>
+          </div>
+        `;
+        new kakao.maps.CustomOverlay({
+          position: new kakao.maps.LatLng(lat, lng),
+          content: markerContent,
+          map: map,
+        });
+
+        setMapLoaded(true);
+      } catch (err) {
+        console.error('Map init error:', err);
+      }
+    }
+
+    initMap();
+  }, []);
+
+  // 경로 검색
   useEffect(() => {
     if (!origin || !dest) return;
 
@@ -43,10 +120,17 @@ function SearchResults() {
       setError(null);
 
       try {
-        const response = await fetch(
-          `/api/search?origin=${encodeURIComponent(origin)}&dest=${encodeURIComponent(dest)}`
-        );
-        const data = await response.json();
+        const sx = searchParams.get('sx');
+        const sy = searchParams.get('sy');
+        const ex = searchParams.get('ex');
+        const ey = searchParams.get('ey');
+
+        let url = `/api/search?origin=${encodeURIComponent(origin)}&dest=${encodeURIComponent(dest)}`;
+        if (sx && sy) url += `&sx=${sx}&sy=${sy}`;
+        if (ex && ey) url += `&ex=${ex}&ey=${ey}`;
+
+        const response = await fetch(url);
+        const data: SearchResponse = await response.json();
 
         if (!response.ok) {
           setError(data.error || '경로 검색에 실패했습니다.');
@@ -54,6 +138,14 @@ function SearchResults() {
         }
 
         setRoutes(data.routes || []);
+        setMatchedPlaces({
+          origin: data.matchedOrigin,
+          dest: data.matchedDest,
+        });
+
+        if (data.routes && data.routes.length > 0) {
+          setSelectedRoute(data.routes[0]);
+        }
       } catch (err) {
         setError('경로 검색 중 오류가 발생했습니다.');
         console.error(err);
@@ -63,140 +155,445 @@ function SearchResults() {
     };
 
     fetchRoutes();
-  }, [origin, dest]);
+  }, [origin, dest, searchParams]);
 
-  if (!origin || !dest) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16">
-        <p className="text-slate-500">출발지와 도착지를 입력해주세요.</p>
-      </div>
-    );
-  }
-
-  if (loading) {
-    return <SearchLoading />;
-  }
-
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 px-4">
-        <p className="text-red-500 mb-4">{error}</p>
-        <Button variant="outline" onClick={() => router.back()}>
-          돌아가기
-        </Button>
-      </div>
-    );
-  }
-
-  if (routes.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16">
-        <p className="text-slate-500">검색 결과가 없습니다.</p>
-      </div>
-    );
-  }
-
-  // 경로 요약 텍스트 생성
-  const getRouteSummary = (legs: RouteResult['legs']) => {
-    return legs
-      .filter((leg) => leg.mode !== 'walk')
-      .map((leg) => {
-        if (leg.mode === 'bus') return `${leg.routeName}번 버스`;
-        if (leg.mode === 'subway') return leg.routeName;
-        return leg.routeName;
-      })
-      .join(' → ');
+  const handleRecentSearch = (search: { origin: string; destination: string }) => {
+    router.push(`/search?origin=${encodeURIComponent(search.origin)}&dest=${encodeURIComponent(search.destination)}`);
   };
 
-  // 경로 타입 뱃지
-  const getPathTypeBadge = (pathType?: number) => {
-    switch (pathType) {
-      case 1:
-        return <Badge className="bg-green-500">지하철</Badge>;
-      case 2:
-        return <Badge className="bg-blue-500">버스</Badge>;
-      case 3:
-        return <Badge className="bg-purple-500">버스+지하철</Badge>;
-      default:
-        return null;
-    }
+  const handleRouteSelect = (route: RouteResult) => {
+    setSelectedRoute(route);
   };
+
+  const moveToCurrentLocation = () => {
+    if (!mapInstanceRef.current || !currentLocation) return;
+    const kakao = window.kakao;
+    mapInstanceRef.current.setCenter(new kakao.maps.LatLng(currentLocation.lat, currentLocation.lng));
+    mapInstanceRef.current.setLevel(5);
+  };
+
+  const tabs = [
+    { id: 'search' as TabType, label: '검색', icon: '🔍' },
+    { id: 'recent' as TabType, label: '최근', icon: '🕐' },
+  ];
 
   return (
-    <div className="px-4 py-4">
-      <div className="mb-4">
-        <div className="flex items-center text-sm">
-          <span className="text-emerald-500 font-medium">{origin}</span>
-          <span className="mx-2 text-slate-400">→</span>
-          <span className="text-red-500 font-medium">{dest}</span>
+    <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
+      {/* 사이드 패널 */}
+      <div
+        className={cn(
+          "flex-shrink-0 bg-background border-r border-border flex flex-col transition-all duration-300",
+          isPanelOpen ? "w-96" : "w-0"
+        )}
+      >
+        {/* 탭 헤더 */}
+        <div className="flex-shrink-0 p-3 border-b border-border bg-muted/30">
+          <div className="flex gap-1">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  "flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors",
+                  activeTab === tab.id
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-accent text-muted-foreground"
+                )}
+              >
+                <span className="mr-1">{tab.icon}</span>
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
-        <p className="text-xs text-slate-400 mt-1">
-          {routes.length}개의 경로를 찾았습니다
-        </p>
+
+        {/* 탭 내용 */}
+        <div className="flex-1 overflow-y-auto">
+          {/* 검색 탭 */}
+          {activeTab === 'search' && (
+            <div className="p-4">
+              <SearchForm />
+
+              {/* 검색 결과 */}
+              {origin && dest && (
+                <div className="mt-4">
+                  {/* 출발/도착 표시 */}
+                  <div className="p-3 bg-muted/50 rounded-lg mb-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-3 h-3 rounded-full bg-blue-500" />
+                      <span className="text-sm truncate">{matchedPlaces.origin || origin}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-red-500" />
+                      <span className="text-sm truncate">{matchedPlaces.dest || dest}</span>
+                    </div>
+                  </div>
+
+                  {/* 로딩 */}
+                  {loading && (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="flex flex-col items-center gap-2">
+                        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+                        <span className="text-sm text-muted-foreground">경로 검색 중...</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 에러 */}
+                  {error && !loading && (
+                    <div className="text-center py-8">
+                      <p className="text-destructive text-sm mb-1">{error}</p>
+                      <p className="text-xs text-muted-foreground">더 정확한 장소명을 입력해보세요</p>
+                    </div>
+                  )}
+
+                  {/* 경로 목록 */}
+                  {!loading && !error && routes.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs text-muted-foreground mb-2">{routes.length}개의 경로</p>
+                      {routes.map((route, index) => (
+                        <button
+                          key={route.id}
+                          onClick={() => handleRouteSelect(route)}
+                          className={cn(
+                            "w-full p-3 text-left rounded-lg border border-border hover:bg-accent/50 transition-colors",
+                            selectedRoute?.id === route.id && "bg-accent border-primary"
+                          )}
+                        >
+                          {index === 0 && (
+                            <div className="flex items-center gap-2 mb-2">
+                              <Badge className="bg-amber-500 text-white text-xs">추천</Badge>
+                              <PathTypeBadge pathType={route.pathType} />
+                            </div>
+                          )}
+
+                          <div className="flex items-baseline gap-2 mb-2">
+                            <span className="text-xl font-bold">{route.totalTime}</span>
+                            <span className="text-sm text-muted-foreground">분</span>
+                            <span className="text-xs text-muted-foreground ml-auto">
+                              환승 {route.transferCount}회
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1 mb-2 flex-wrap">
+                            {route.legs.map((leg, legIndex) => (
+                              <div key={legIndex} className="flex items-center gap-1">
+                                {leg.mode === 'walk' ? (
+                                  <span className="text-xs text-muted-foreground flex items-center gap-0.5">
+                                    <WalkIcon className="h-3 w-3" />
+                                    {leg.duration}분
+                                  </span>
+                                ) : (
+                                  <span
+                                    className={cn(
+                                      "px-1.5 py-0.5 rounded text-xs font-medium text-white",
+                                      leg.mode === 'bus' && "bg-blue-500",
+                                      leg.mode === 'subway' && "bg-green-500"
+                                    )}
+                                  >
+                                    {leg.routeName}
+                                  </span>
+                                )}
+                                {legIndex < route.legs.length - 1 && (
+                                  <svg className="h-3 w-3 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                  </svg>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                            <span>{(route.fare || 0).toLocaleString()}원</span>
+                            {route.totalDistance && (
+                              <span>{(route.totalDistance / 1000).toFixed(1)}km</span>
+                            )}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {!loading && !error && routes.length === 0 && origin && dest && (
+                    <div className="text-center py-8">
+                      <p className="text-muted-foreground text-sm">검색 결과가 없습니다</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 검색 전 안내 */}
+              {!origin && !dest && (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
+                    <svg className="w-8 h-8 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                    </svg>
+                  </div>
+                  <p className="text-muted-foreground text-sm">
+                    출발지와 도착지를 입력하여<br />경로를 검색하세요
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 최근 검색 탭 */}
+          {activeTab === 'recent' && (
+            <div>
+              {recentSearches.length > 0 ? (
+                <>
+                  <div className="p-3 bg-muted/50 border-b border-border sticky top-0">
+                    <span className="text-sm text-muted-foreground">
+                      최근 검색 {recentSearches.length}개
+                    </span>
+                  </div>
+                  <div>
+                    {recentSearches.slice(0, 20).map((search, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => handleRecentSearch(search)}
+                        className="w-full p-4 text-left border-b border-border hover:bg-accent/50 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <svg className="w-4 h-4 text-muted-foreground flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center text-sm">
+                              <span className="truncate font-medium">{search.origin}</span>
+                              <svg className="mx-2 h-3 w-3 text-muted-foreground flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                              </svg>
+                              <span className="truncate">{search.destination}</span>
+                            </div>
+                          </div>
+                          <svg className="w-4 h-4 text-muted-foreground flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+                  <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
+                    <svg className="w-8 h-8 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <p className="text-muted-foreground text-sm">최근 검색 기록이 없습니다</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* 선택된 경로 상세 */}
+        {selectedRoute && (
+          <div className="flex-shrink-0 p-4 border-t border-border bg-muted/30 max-h-64 overflow-y-auto">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-lg font-bold">{selectedRoute.totalTime}분</span>
+                <PathTypeBadge pathType={selectedRoute.pathType} />
+              </div>
+              <button
+                onClick={() => setSelectedRoute(null)}
+                className="p-1 hover:bg-accent rounded"
+              >
+                <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <RouteTimeline legs={selectedRoute.legs} />
+          </div>
+        )}
       </div>
 
-      <div className="space-y-3">
-        {routes.map((route) => (
-          <Card key={route.id} className="p-4">
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xl font-bold text-slate-900">
-                    {route.totalTime}분
-                  </span>
-                  <Badge variant="outline" className="text-xs">
-                    환승 {route.transferCount}회
-                  </Badge>
-                  {getPathTypeBadge(route.pathType)}
-                </div>
-                <p className="text-sm text-slate-600 mb-2">
-                  {getRouteSummary(route.legs) || '도보 경로'}
-                </p>
-                <div className="flex items-center gap-3 text-xs text-slate-500">
-                  <span>도보 {route.walkTime}분</span>
-                  <span>요금 {(route.fare || 0).toLocaleString()}원</span>
-                </div>
-              </div>
-              <Button
-                size="sm"
-                className="bg-emerald-500 hover:bg-emerald-600"
-                onClick={() => {
-                  // 경로 상세 정보를 sessionStorage에 저장
-                  sessionStorage.setItem('selectedRoute', JSON.stringify(route));
-                  router.push(`/routes/${route.id}`);
-                }}
-              >
-                상세보기
-              </Button>
+      {/* 지도 영역 */}
+      <div className="flex-1 relative">
+        <div ref={mapRef} className="w-full h-full" />
+
+        {/* 패널 토글 버튼 */}
+        <button
+          onClick={() => setIsPanelOpen(!isPanelOpen)}
+          className="absolute top-4 left-4 z-10 bg-white p-2 rounded-lg shadow-lg hover:bg-gray-50 transition-colors"
+        >
+          <svg
+            className={cn("w-5 h-5 text-gray-600 transition-transform", !isPanelOpen && "rotate-180")}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+
+        {/* 현재 위치 버튼 */}
+        <button
+          onClick={moveToCurrentLocation}
+          className="absolute bottom-4 right-4 z-10 w-10 h-10 bg-white rounded-lg shadow-lg flex items-center justify-center hover:bg-gray-50 transition-colors"
+        >
+          <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+          </svg>
+        </button>
+
+        {/* 줌 컨트롤 */}
+        <div className="absolute bottom-16 right-4 z-10 flex flex-col bg-white rounded-lg shadow-lg overflow-hidden">
+          <button
+            onClick={() => mapInstanceRef.current?.setLevel(mapInstanceRef.current.getLevel() - 1)}
+            className="w-10 h-10 flex items-center justify-center hover:bg-gray-50 transition-colors border-b border-gray-200"
+          >
+            <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+          </button>
+          <button
+            onClick={() => mapInstanceRef.current?.setLevel(mapInstanceRef.current.getLevel() + 1)}
+            className="w-10 h-10 flex items-center justify-center hover:bg-gray-50 transition-colors"
+          >
+            <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+            </svg>
+          </button>
+        </div>
+
+        {/* 지도 로딩 */}
+        {!mapLoaded && (
+          <div className="absolute inset-0 flex items-center justify-center bg-muted">
+            <div className="flex flex-col items-center gap-2">
+              <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+              <span className="text-sm text-muted-foreground">지도 로딩 중...</span>
             </div>
-          </Card>
-        ))}
+          </div>
+        )}
       </div>
     </div>
+  );
+}
+
+function RouteTimeline({ legs }: { legs: RouteLeg[] }) {
+  return (
+    <div className="relative">
+      {legs.map((leg, index) => (
+        <div key={index} className="flex gap-3 pb-3 last:pb-0">
+          <div className="flex flex-col items-center">
+            <div
+              className={cn(
+                "w-7 h-7 rounded-full flex items-center justify-center text-white",
+                leg.mode === 'walk' && "bg-gray-400",
+                leg.mode === 'bus' && "bg-blue-500",
+                leg.mode === 'subway' && "bg-green-500"
+              )}
+            >
+              {leg.mode === 'walk' && <WalkIcon className="h-3.5 w-3.5" />}
+              {leg.mode === 'bus' && <BusIcon className="h-3.5 w-3.5" />}
+              {leg.mode === 'subway' && <SubwayIcon className="h-3.5 w-3.5" />}
+            </div>
+            {index < legs.length - 1 && (
+              <div className="w-0.5 flex-1 bg-gray-200 my-1" />
+            )}
+          </div>
+
+          <div className="flex-1 pb-2">
+            {leg.mode === 'walk' ? (
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  도보 {leg.duration}분
+                  {leg.distance && <span className="ml-1">({leg.distance}m)</span>}
+                </p>
+                <p className="text-xs text-muted-foreground/70">{leg.startName} → {leg.endName}</p>
+              </div>
+            ) : (
+              <div>
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span
+                    className={cn(
+                      "px-1.5 py-0.5 rounded text-xs font-bold text-white",
+                      leg.mode === 'bus' && "bg-blue-500",
+                      leg.mode === 'subway' && "bg-green-500"
+                    )}
+                  >
+                    {leg.routeName}
+                  </span>
+                  <span className="text-sm text-muted-foreground">
+                    {leg.duration}분
+                    {leg.stationCount && <span className="ml-1">({leg.stationCount}정거장)</span>}
+                  </span>
+                </div>
+                <p className="text-sm font-medium">{leg.startName}</p>
+                <p className="text-xs text-muted-foreground/70">→ {leg.endName}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PathTypeBadge({ pathType }: { pathType?: number }) {
+  switch (pathType) {
+    case 1:
+      return <Badge className="bg-green-500 text-white text-xs">지하철</Badge>;
+    case 2:
+      return <Badge className="bg-blue-500 text-white text-xs">버스</Badge>;
+    case 3:
+      return <Badge className="bg-purple-500 text-white text-xs">버스+지하철</Badge>;
+    default:
+      return null;
+  }
+}
+
+function WalkIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="currentColor" viewBox="0 0 24 24">
+      <path d="M13.5 5.5c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zM9.8 8.9L7 23h2.1l1.8-8 2.1 2v6h2v-7.5l-2.1-2 .6-3C14.8 12 16.8 13 19 13v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1L6 8.3V13h2V9.6l1.8-.7" />
+    </svg>
+  );
+}
+
+function BusIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="currentColor" viewBox="0 0 24 24">
+      <path d="M4 16c0 .88.39 1.67 1 2.22V20c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h8v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1.78c.61-.55 1-1.34 1-2.22V6c0-3.5-3.58-4-8-4s-8 .5-8 4v10zm3.5 1c-.83 0-1.5-.67-1.5-1.5S6.67 14 7.5 14s1.5.67 1.5 1.5S8.33 17 7.5 17zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-6H6V6h12v5z" />
+    </svg>
+  );
+}
+
+function SubwayIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="currentColor" viewBox="0 0 24 24">
+      <path d="M12 2c-4.42 0-8 .5-8 4v9.5C4 17.43 5.57 19 7.5 19L6 20.5v.5h12v-.5L16.5 19c1.93 0 3.5-1.57 3.5-3.5V6c0-3.5-3.58-4-8-4zM7.5 17c-.83 0-1.5-.67-1.5-1.5S6.67 14 7.5 14s1.5.67 1.5 1.5S8.33 17 7.5 17zm3.5-6H6V6h5v5zm2 0V6h5v5h-5zm3.5 6c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z" />
+    </svg>
   );
 }
 
 export default function SearchPage() {
   return (
     <Suspense fallback={<SearchLoading />}>
-      <SearchResults />
+      <SearchContent />
     </Suspense>
   );
 }
 
 function SearchLoading() {
   return (
-    <div className="px-4 py-4 space-y-3">
-      <div className="mb-4">
-        <div className="h-4 w-48 bg-slate-200 rounded animate-pulse" />
+    <div className="flex h-[calc(100vh-4rem)]">
+      <div className="w-96 bg-background border-r border-border p-4">
+        <div className="animate-pulse space-y-4">
+          <div className="flex gap-1">
+            <div className="flex-1 h-10 bg-muted rounded-lg" />
+            <div className="flex-1 h-10 bg-muted rounded-lg" />
+          </div>
+          <div className="h-10 bg-muted rounded" />
+          <div className="h-10 bg-muted rounded" />
+        </div>
       </div>
-      {[1, 2, 3].map((i) => (
-        <Card key={i} className="p-4 animate-pulse">
-          <div className="h-6 w-20 bg-slate-200 rounded mb-2" />
-          <div className="h-4 w-48 bg-slate-200 rounded mb-2" />
-          <div className="h-3 w-32 bg-slate-200 rounded" />
-        </Card>
-      ))}
+      <div className="flex-1 bg-muted" />
     </div>
   );
 }

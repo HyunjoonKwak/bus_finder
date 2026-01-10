@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
+import { ServiceWorkerRegistration } from '@/components/ServiceWorkerRegistration';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -16,6 +17,12 @@ export const metadata: Metadata = {
   title: '버스타볼까',
   description: '나만의 맞춤형 환승 추천과 탑승 이력/메모를 기록하는 개인 맞춤 버스 앱',
   manifest: '/manifest.json',
+  icons: {
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+    ],
+    apple: '/icons/icon-192x192.png',
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
@@ -46,6 +53,7 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-capable" content="yes" />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}>
+        <ServiceWorkerRegistration />
         {children}
       </body>
     </html>

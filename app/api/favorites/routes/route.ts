@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { bus_id, bus_no } = body;
+  const { bus_id, bus_no, bus_type } = body;
 
   if (!bus_id || !bus_no) {
     return NextResponse.json(
@@ -54,6 +54,7 @@ export async function POST(request: NextRequest) {
       user_id: user.id,
       bus_id,
       bus_no,
+      bus_type: bus_type || null,
     })
     .select()
     .single();

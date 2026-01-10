@@ -1,11 +1,13 @@
 'use client';
 
-import { useEffect, useState, useCallback, Suspense } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useEffect, useState, useCallback, Suspense, useRef } from 'react';
+import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { ArrivalInfo } from '@/components/station/ArrivalInfo';
 import type { RealtimeArrivalInfo } from '@/lib/odsay/types';
 import { createClient } from '@/lib/supabase/client';
+
+const REFRESH_INTERVAL = 15; // 15초마다 새로고침
 
 interface User {
   id: string;
@@ -16,30 +18,62 @@ interface TrackingTarget {
 }
 
 function StationDetailContent() {
+  const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
   const stationId = params.id as string;
   const stationName = searchParams.get('name') || '정류소';
+  const arsId = searchParams.get('arsId') || '';
 
   const [arrivals, setArrivals] = useState<RealtimeArrivalInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [isFavorite, setIsFavorite] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [trackingTargets, setTrackingTargets] = useState<string[]>([]);
+  const [countdown, setCountdown] = useState(REFRESH_INTERVAL);
+  const countdownRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchArrivals = useCallback(async () => {
     try {
-      const response = await fetch(
-        `/api/odsay/station/arrival?stationId=${stationId}`
-      );
+      // 공공데이터 API 사용 (서울/경기 자동 판단)
+      const params = new URLSearchParams();
+      params.set('stationId', stationId);
+      if (arsId) params.set('arsId', arsId);
+
+      const response = await fetch(`/api/bus/arrival?${params.toString()}`);
       const data = await response.json();
-      setArrivals(data.arrivals || []);
+
+      // 응답 형식을 RealtimeArrivalInfo로 변환
+      const formattedArrivals = (data.arrivals || []).map((item: any) => ({
+        routeID: item.routeId || '',
+        routeNm: item.routeName,
+        routeType: item.routeType,
+        arrival1: item.predictTimeSec1 ? {
+          arrivalSec: item.predictTimeSec1,
+          leftStation: item.locationNo1 || 0,
+          busPosition: item.direction,
+          busPlateNo: item.plateNo1,
+          remainSeat: item.remainSeat1,
+          lowPlate: item.lowPlate1,
+          crowded: item.crowded1,
+        } : undefined,
+        arrival2: item.predictTimeSec2 ? {
+          arrivalSec: item.predictTimeSec2,
+          leftStation: item.locationNo2 || 0,
+          busPlateNo: item.plateNo2,
+          remainSeat: item.remainSeat2,
+          lowPlate: item.lowPlate2,
+          crowded: item.crowded2,
+        } : undefined,
+      }));
+
+      setArrivals(formattedArrivals);
     } catch (error) {
       console.error('Fetch arrivals error:', error);
     } finally {
       setLoading(false);
     }
-  }, [stationId]);
+  }, [stationId, arsId]);
 
   const fetchTrackingTargets = useCallback(async () => {
     try {
@@ -55,6 +89,17 @@ function StationDetailContent() {
       console.error('Fetch tracking targets error:', error);
     }
   }, [stationId]);
+
+  // 카운트다운 리셋
+  const resetCountdown = useCallback(() => {
+    setCountdown(REFRESH_INTERVAL);
+  }, []);
+
+  // 수동 새로고침
+  const handleManualRefresh = useCallback(() => {
+    fetchArrivals();
+    resetCountdown();
+  }, [fetchArrivals, resetCountdown]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -73,11 +118,28 @@ function StationDetailContent() {
     // 도착 정보 가져오기
     fetchArrivals();
 
-    // 5초마다 새로고침
-    const interval = setInterval(fetchArrivals, 5000);
+    // 카운트다운 타이머 (1초마다)
+    countdownRef.current = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          fetchArrivals();
+          return REFRESH_INTERVAL;
+        }
+        return prev - 1;
+      });
+    }, 1000);
 
-    return () => clearInterval(interval);
+    return () => {
+      if (countdownRef.current) {
+        clearInterval(countdownRef.current);
+      }
+    };
   }, [stationId, fetchArrivals, fetchTrackingTargets]);
+
+  // 버스 상세 페이지로 이동
+  const handleBusClick = (busId: string, busNo: string) => {
+    router.push(`/bus/${busId}?no=${encodeURIComponent(busNo)}`);
+  };
 
   const checkFavorite = async (userId: string) => {
     try {
@@ -163,8 +225,8 @@ function StationDetailContent() {
     <div className="px-4 py-4">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">{stationName}</h1>
-          <p className="text-xs text-slate-500">정류소 ID: {stationId}</p>
+          <h1 className="text-xl font-bold text-foreground">{stationName}</h1>
+          <p className="text-xs text-muted-foreground">정류소 ID: {stationId}</p>
         </div>
         <Button
           variant="outline"
@@ -177,15 +239,39 @@ function StationDetailContent() {
       </div>
 
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-medium text-slate-700">실시간 도착 정보</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-medium text-foreground">실시간 도착 정보</h2>
+          <span className="text-xs text-muted-foreground">
+            {countdown}초 후 갱신
+          </span>
+        </div>
         <Button
           variant="ghost"
           size="sm"
-          onClick={fetchArrivals}
-          className="text-xs"
+          onClick={handleManualRefresh}
+          className="text-xs gap-1"
         >
+          <RefreshIcon className="w-3 h-3" />
           새로고침
         </Button>
+      </div>
+
+      {/* 카운트다운 표시 (펄스 효과) */}
+      <div className="flex items-center gap-2 mb-4">
+        <div className="relative">
+          <div className="w-2 h-2 bg-primary rounded-full animate-ping absolute" />
+          <div className="w-2 h-2 bg-primary rounded-full" />
+        </div>
+        <div className="flex gap-0.5">
+          {Array.from({ length: REFRESH_INTERVAL }).map((_, i) => (
+            <div
+              key={i}
+              className={`w-1.5 h-1.5 rounded-full transition-colors duration-300 ${
+                i < countdown ? 'bg-primary' : 'bg-muted'
+              }`}
+            />
+          ))}
+        </div>
       </div>
 
       <ArrivalInfo
@@ -193,12 +279,14 @@ function StationDetailContent() {
         loading={loading}
         trackingTargets={trackingTargets}
         onToggleTracking={user ? toggleTracking : undefined}
+        onBusClick={handleBusClick}
       />
 
       {!loading && arrivals.length === 0 && (
-        <p className="text-center text-slate-500 text-sm mt-4">
-          현재 운행 중인 버스가 없습니다.
-        </p>
+        <div className="text-center text-muted-foreground text-sm mt-4 space-y-2">
+          <p>현재 실시간 도착 정보를 제공하지 않는 정류소입니다.</p>
+          <p className="text-xs">경기도 일부 지역은 실시간 정보 준비 중입니다.</p>
+        </div>
       )}
     </div>
   );
@@ -210,12 +298,20 @@ export default function StationDetailPage() {
       fallback={
         <div className="px-4 py-4">
           <div className="flex justify-center py-16">
-            <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
           </div>
         </div>
       }
     >
       <StationDetailContent />
     </Suspense>
+  );
+}
+
+function RefreshIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+    </svg>
   );
 }

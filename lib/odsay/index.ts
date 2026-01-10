@@ -76,6 +76,20 @@ export async function searchBusLane(
 }
 
 /**
+ * 두 지점 간 거리 계산 (Haversine formula)
+ */
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371000; // 지구 반지름 (미터)
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+/**
  * 주변 정류소 검색
  * @param x 경도
  * @param y 위도
@@ -97,7 +111,16 @@ export async function searchNearbyStations(
     return [];
   }
 
-  return data.result?.station || [];
+  // ODSay API는 distance를 반환하지 않으므로 직접 계산
+  const stations = data.result?.station || [];
+  return stations.map((station: any) => ({
+    stationID: String(station.stationID),
+    stationName: station.stationName,
+    x: String(station.x),
+    y: String(station.y),
+    arsID: station.arsID || undefined,
+    distance: calculateDistance(y, x, parseFloat(String(station.y)), parseFloat(String(station.x))),
+  }));
 }
 
 /**
@@ -169,9 +192,12 @@ export function formatArrivalTime(seconds: number): string {
  * 거리를 미터/km 문자열로 변환
  * @param meters 미터
  */
-export function formatDistance(meters: number): string {
+export function formatDistance(meters: number | undefined | null): string {
+  if (meters === undefined || meters === null || isNaN(meters)) {
+    return '-';
+  }
   if (meters < 1000) {
-    return `${meters}m`;
+    return `${Math.round(meters)}m`;
   }
   return `${(meters / 1000).toFixed(1)}km`;
 }

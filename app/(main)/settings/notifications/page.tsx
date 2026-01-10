@@ -150,7 +150,7 @@ export default function NotificationSettingsPage() {
     return (
       <div className="px-4 py-4">
         <div className="flex justify-center py-16">
-          <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
         </div>
       </div>
     );
@@ -160,7 +160,7 @@ export default function NotificationSettingsPage() {
     <div className="px-4 py-4">
       <button
         onClick={() => router.back()}
-        className="flex items-center text-slate-600 mb-4"
+        className="flex items-center text-muted-foreground mb-4"
       >
         <svg
           className="w-5 h-5 mr-1"
@@ -179,7 +179,7 @@ export default function NotificationSettingsPage() {
       </button>
 
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-bold text-slate-900">알림 설정</h1>
+        <h1 className="text-xl font-bold text-foreground">알림 설정</h1>
         <Button
           variant="outline"
           size="sm"
@@ -193,11 +193,11 @@ export default function NotificationSettingsPage() {
         <Card className="p-4 mb-4">
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label className="block text-sm font-medium text-foreground mb-1">
                 알림 유형
               </label>
               <select
-                className="w-full border rounded-md px-3 py-2 text-sm"
+                className="w-full border border-border rounded-md px-3 py-2 text-sm bg-background text-foreground"
                 value={formData.notification_type}
                 onChange={(e) =>
                   setFormData({ ...formData, notification_type: e.target.value })
@@ -209,7 +209,7 @@ export default function NotificationSettingsPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label className="block text-sm font-medium text-foreground mb-1">
                 알림 시점 (분 전)
               </label>
               <Input
@@ -227,7 +227,7 @@ export default function NotificationSettingsPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label className="block text-sm font-medium text-foreground mb-1">
                 알림 방법
               </label>
               <div className="flex gap-2">
@@ -250,7 +250,7 @@ export default function NotificationSettingsPage() {
 
             {formData.webhook_type === 'discord' && (
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="block text-sm font-medium text-foreground mb-1">
                   Discord Webhook URL
                 </label>
                 <Input
@@ -260,7 +260,7 @@ export default function NotificationSettingsPage() {
                     setFormData({ ...formData, webhook_url: e.target.value })
                   }
                 />
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   서버 설정 → 연동 → 웹후크에서 생성할 수 있습니다.
                 </p>
               </div>
@@ -269,7 +269,7 @@ export default function NotificationSettingsPage() {
             {formData.webhook_type === 'telegram' && (
               <>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                  <label className="block text-sm font-medium text-foreground mb-1">
                     Bot Token
                   </label>
                   <Input
@@ -279,12 +279,12 @@ export default function NotificationSettingsPage() {
                       setFormData({ ...formData, bot_token: e.target.value })
                     }
                   />
-                  <p className="text-xs text-slate-500 mt-1">
+                  <p className="text-xs text-muted-foreground mt-1">
                     @BotFather에서 봇을 생성하고 토큰을 받으세요.
                   </p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                  <label className="block text-sm font-medium text-foreground mb-1">
                     Chat ID
                   </label>
                   <Input
@@ -294,7 +294,7 @@ export default function NotificationSettingsPage() {
                       setFormData({ ...formData, chat_id: e.target.value })
                     }
                   />
-                  <p className="text-xs text-slate-500 mt-1">
+                  <p className="text-xs text-muted-foreground mt-1">
                     @userinfobot에서 채팅 ID를 확인할 수 있습니다.
                   </p>
                 </div>
@@ -320,7 +320,7 @@ export default function NotificationSettingsPage() {
       {settings.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <svg
-            className="w-16 h-16 text-slate-300 mb-4"
+            className="w-16 h-16 text-muted-foreground/50 mb-4"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -332,8 +332,8 @@ export default function NotificationSettingsPage() {
               d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
             />
           </svg>
-          <p className="text-slate-500 mb-2">등록된 알림 설정이 없습니다.</p>
-          <p className="text-sm text-slate-400">
+          <p className="text-muted-foreground mb-2">등록된 알림 설정이 없습니다.</p>
+          <p className="text-sm text-muted-foreground/70">
             Discord나 Telegram으로 버스 도착 알림을 받아보세요.
           </p>
         </div>
@@ -353,7 +353,7 @@ export default function NotificationSettingsPage() {
                       {setting.webhook_type === 'telegram' ? 'Telegram' : 'Discord'}
                     </Badge>
                   </div>
-                  <p className="text-sm text-slate-600 mt-2">
+                  <p className="text-sm text-muted-foreground mt-2">
                     {setting.minutes_before}분 전 알림
                   </p>
                 </div>
@@ -362,8 +362,8 @@ export default function NotificationSettingsPage() {
                     onClick={() => handleToggle(setting)}
                     className={`p-2 rounded-full ${
                       setting.is_enabled
-                        ? 'text-emerald-600'
-                        : 'text-slate-400'
+                        ? 'text-primary'
+                        : 'text-muted-foreground'
                     }`}
                   >
                     {setting.is_enabled ? (
@@ -378,7 +378,7 @@ export default function NotificationSettingsPage() {
                   </button>
                   <button
                     onClick={() => handleDelete(setting.id)}
-                    className="p-2 text-slate-400 hover:text-red-500"
+                    className="p-2 text-muted-foreground hover:text-destructive"
                   >
                     <svg
                       className="w-5 h-5"

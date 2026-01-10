@@ -2,24 +2,51 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useSearchStore } from '@/lib/store';
+import { PlaceSearchInput } from './PlaceSearchInput';
 
-function SearchFormContent() {
+interface SelectedPlace {
+  name: string;
+  x: string;
+  y: string;
+}
+
+interface SearchFormContentProps {
+  variant?: 'default' | 'compact';
+  onSearch?: (origin: string, dest: string, params?: { sx?: string; sy?: string; ex?: string; ey?: string }) => void;
+}
+
+function SearchFormContent({ variant = 'default', onSearch }: SearchFormContentProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { addRecentSearch } = useSearchStore();
   const [origin, setOrigin] = useState('');
   const [destination, setDestination] = useState('');
+  const [originPlace, setOriginPlace] = useState<SelectedPlace | null>(null);
+  const [destPlace, setDestPlace] = useState<SelectedPlace | null>(null);
 
   // URL 파라미터에서 선택된 위치 정보 가져오기
   useEffect(() => {
     const sname = searchParams.get('sname');
     const ename = searchParams.get('ename');
+    const sx = searchParams.get('sx');
+    const sy = searchParams.get('sy');
+    const ex = searchParams.get('ex');
+    const ey = searchParams.get('ey');
 
-    if (sname) setOrigin(sname);
-    if (ename) setDestination(ename);
+    if (sname) {
+      setOrigin(sname);
+      if (sx && sy) {
+        setOriginPlace({ name: sname, x: sx, y: sy });
+      }
+    }
+    if (ename) {
+      setDestination(ename);
+      if (ex && ey) {
+        setDestPlace({ name: ename, x: ex, y: ey });
+      }
+    }
   }, [searchParams]);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -28,22 +55,39 @@ function SearchFormContent() {
 
     addRecentSearch(origin, destination);
 
-    // 좌표가 있으면 함께 전달
-    const sx = searchParams.get('sx');
-    const sy = searchParams.get('sy');
-    const ex = searchParams.get('ex');
-    const ey = searchParams.get('ey');
+    // onSearch 콜백이 있으면 직접 호출, 없으면 페이지 이동
+    if (onSearch) {
+      const params: { sx?: string; sy?: string; ex?: string; ey?: string } = {};
+      if (originPlace) {
+        params.sx = originPlace.x;
+        params.sy = originPlace.y;
+      }
+      if (destPlace) {
+        params.ex = destPlace.x;
+        params.ey = destPlace.y;
+      }
+      onSearch(origin, destination, Object.keys(params).length > 0 ? params : undefined);
+    } else {
+      // 좌표가 있으면 함께 전달
+      let url = `/search?origin=${encodeURIComponent(origin)}&dest=${encodeURIComponent(destination)}`;
+      if (originPlace) {
+        url += `&sx=${originPlace.x}&sy=${originPlace.y}`;
+      }
+      if (destPlace) {
+        url += `&ex=${destPlace.x}&ey=${destPlace.y}`;
+      }
 
-    let url = `/search?origin=${encodeURIComponent(origin)}&dest=${encodeURIComponent(destination)}`;
-    if (sx && sy) url += `&sx=${sx}&sy=${sy}`;
-    if (ex && ey) url += `&ex=${ex}&ey=${ey}`;
-
-    router.push(url);
+      router.push(url);
+    }
   };
 
   const handleSwap = () => {
+    const tempOrigin = origin;
+    const tempOriginPlace = originPlace;
     setOrigin(destination);
-    setDestination(origin);
+    setOriginPlace(destPlace);
+    setDestination(tempOrigin);
+    setDestPlace(tempOriginPlace);
   };
 
   const handleMapSelect = (field: 'origin' | 'dest') => {
@@ -51,37 +95,55 @@ function SearchFormContent() {
     params.set('field', field);
     params.set('returnTo', '/');
 
-    // 기존 좌표 유지
-    const sx = searchParams.get('sx');
-    const sy = searchParams.get('sy');
-    const ex = searchParams.get('ex');
-    const ey = searchParams.get('ey');
-
-    if (sx) params.set('sx', sx);
-    if (sy) params.set('sy', sy);
+    if (originPlace) {
+      params.set('sx', originPlace.x);
+      params.set('sy', originPlace.y);
+    }
     if (origin) params.set('sname', origin);
-    if (ex) params.set('ex', ex);
-    if (ey) params.set('ey', ey);
+    if (destPlace) {
+      params.set('ex', destPlace.x);
+      params.set('ey', destPlace.y);
+    }
     if (destination) params.set('ename', destination);
 
     router.push(`/map-select?${params.toString()}`);
   };
 
+  const handleOriginSelect = (place: { name: string; x: string; y: string }) => {
+    setOriginPlace({ name: place.name, x: place.x, y: place.y });
+  };
+
+  const handleDestSelect = (place: { name: string; x: string; y: string }) => {
+    setDestPlace({ name: place.name, x: place.x, y: place.y });
+  };
+
+  const handleOriginChange = (value: string) => {
+    setOrigin(value);
+    // 텍스트가 변경되면 기존 선택된 장소 초기화
+    if (originPlace && value !== originPlace.name) {
+      setOriginPlace(null);
+    }
+  };
+
+  const handleDestChange = (value: string) => {
+    setDestination(value);
+    if (destPlace && value !== destPlace.name) {
+      setDestPlace(null);
+    }
+  };
+
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       <div className="relative flex gap-2">
-        <div className="flex-1 relative">
-          <Input
-            type="text"
-            placeholder="출발지를 입력하세요"
-            value={origin}
-            onChange={(e) => setOrigin(e.target.value)}
-            className="pr-12"
-          />
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-primary text-xs font-semibold">
-            출발
-          </span>
-        </div>
+        <PlaceSearchInput
+          value={origin}
+          onChange={handleOriginChange}
+          onSelect={handleOriginSelect}
+          placeholder="출발지를 입력하세요"
+          label="출발"
+          labelColor="text-primary"
+          className="flex-1"
+        />
         <button
           type="button"
           onClick={() => handleMapSelect('origin')}
@@ -103,18 +165,15 @@ function SearchFormContent() {
       </div>
 
       <div className="relative flex gap-2">
-        <div className="flex-1 relative">
-          <Input
-            type="text"
-            placeholder="도착지를 입력하세요"
-            value={destination}
-            onChange={(e) => setDestination(e.target.value)}
-            className="pr-12"
-          />
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-destructive text-xs font-semibold">
-            도착
-          </span>
-        </div>
+        <PlaceSearchInput
+          value={destination}
+          onChange={handleDestChange}
+          onSelect={handleDestSelect}
+          placeholder="도착지를 입력하세요"
+          label="도착"
+          labelColor="text-destructive"
+          className="flex-1"
+        />
         <button
           type="button"
           onClick={() => handleMapSelect('dest')}
@@ -136,7 +195,12 @@ function SearchFormContent() {
   );
 }
 
-export function SearchForm() {
+interface SearchFormProps {
+  variant?: 'default' | 'compact';
+  onSearch?: (origin: string, dest: string, params?: { sx?: string; sy?: string; ex?: string; ey?: string }) => void;
+}
+
+export function SearchForm({ variant = 'default', onSearch }: SearchFormProps) {
   return (
     <Suspense
       fallback={
@@ -150,7 +214,7 @@ export function SearchForm() {
         </div>
       }
     >
-      <SearchFormContent />
+      <SearchFormContent variant={variant} onSearch={onSearch} />
     </Suspense>
   );
 }

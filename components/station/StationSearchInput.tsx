@@ -37,8 +37,9 @@ export function StationSearchInput({
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
       try {
+        // 공공데이터포털 API 사용
         const response = await fetch(
-          `/api/odsay/station/search?q=${encodeURIComponent(query)}`
+          `/api/bus/station/search?q=${encodeURIComponent(query)}`
         );
         const data = await response.json();
         setResults(data.stations || []);

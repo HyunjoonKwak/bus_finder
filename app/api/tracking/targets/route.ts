@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { bus_id, bus_no, station_id, station_name } = body;
+  const { bus_id, bus_no, station_id, station_name, ars_id } = body;
 
   if (!bus_id || !bus_no || !station_id || !station_name) {
     return NextResponse.json(
@@ -57,6 +57,7 @@ export async function POST(request: NextRequest) {
       bus_no,
       station_id,
       station_name,
+      ars_id: ars_id || null, // 정류소 고유번호 (서울시/경기도 API 조회용)
       is_active: true,
     })
     .select()

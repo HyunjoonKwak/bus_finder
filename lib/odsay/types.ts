@@ -81,17 +81,24 @@ export interface RealtimeArrivalResponse {
 export interface RealtimeArrivalInfo {
   routeID: string;
   routeNm: string;
+  routeType?: number; // 버스 타입 (서울: 1~6, 경기: 11~30)
   arrival1?: {
     arrivalSec: number; // 도착 예정 시간 (초)
     leftStation: number; // 남은 정류장 수
-    busPlateNo?: string; // 버스 번호판
+    busPlateNo?: string; // 버스 번호판 (차량번호)
     busPosition?: string; // 버스 현재 위치 정류장명
+    remainSeat?: number; // 잔여 좌석 (-1: 정보없음)
+    lowPlate?: boolean; // 저상버스 여부
+    crowded?: number; // 혼잡도 (1:여유, 2:보통, 3:혼잡, 4:매우혼잡)
   };
   arrival2?: {
     arrivalSec: number;
     leftStation: number;
     busPlateNo?: string;
     busPosition?: string;
+    remainSeat?: number;
+    lowPlate?: boolean;
+    crowded?: number;
   };
 }
 

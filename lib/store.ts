@@ -11,6 +11,7 @@ interface SearchState {
   setFilters: (filters: Partial<SearchFilters>) => void;
   addRecentSearch: (origin: string, destination: string) => void;
   clearSearch: () => void;
+  clearSearches: () => void;
 }
 
 const defaultFilters: SearchFilters = {
@@ -51,5 +52,10 @@ export const useSearchStore = create<SearchState>((set) => ({
       origin: null,
       destination: null,
       filters: defaultFilters,
+    }),
+
+  clearSearches: () =>
+    set({
+      recentSearches: [],
     }),
 }));

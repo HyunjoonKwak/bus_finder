@@ -2,15 +2,18 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import type { User } from '@supabase/supabase-js';
 
 export function Header() {
   const router = useRouter();
+  const pathname = usePathname();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const isHome = pathname === '/';
 
   useEffect(() => {
     const supabase = createClient();
@@ -39,10 +42,10 @@ export function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-slate-200 bg-white">
+    <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="flex h-14 items-center justify-between px-4">
         <Link href="/" className="flex items-center gap-2">
-          <span className="text-xl font-bold tracking-tight text-emerald-500">
+          <span className="text-xl font-bold tracking-tight text-primary">
             버스타볼까
           </span>
         </Link>
@@ -53,7 +56,7 @@ export function Header() {
               variant="ghost"
               size="sm"
               onClick={handleLogout}
-              className="text-slate-600"
+              className="text-muted-foreground hover:text-foreground"
             >
               로그아웃
             </Button>
@@ -62,7 +65,7 @@ export function Header() {
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-emerald-500"
+                className="text-primary hover:text-primary/80"
               >
                 로그인
               </Button>
