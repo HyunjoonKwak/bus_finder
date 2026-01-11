@@ -133,11 +133,16 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
+@layer utilities {
+  .glass {
+    @apply bg-white/70 dark:bg-black/70 backdrop-blur-2xl border border-white/20 dark:border-white/10 shadow-lg;
   }
-  body {
-    @apply bg-background text-foreground;
+  
+  .glass-card {
+    @apply bg-white/50 dark:bg-black/50 backdrop-blur-xl border border-white/20 dark:border-white/10 shadow-md hover:bg-white/60 dark:hover:bg-black/60 transition-all duration-300;
+  }
+
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-emerald-500 to-blue-500;
   }
 }
