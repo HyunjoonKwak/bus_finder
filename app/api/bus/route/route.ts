@@ -20,6 +20,11 @@ export async function GET(request: NextRequest) {
 
     // 공공데이터 API에서 정보를 가져왔으면 반환
     if (stations.length > 0) {
+      // 경기도 버스의 경우 direction이 없을 수 있음 - 정류소 순번으로 방향 추론
+      // 대부분의 버스 노선은 왕복 노선이므로, 전체 정류소의 절반 지점이 회차점
+      const totalStations = stations.length;
+      const midPoint = Math.ceil(totalStations / 2);
+
       return NextResponse.json({
         routeInfo: routeInfo ? {
           routeId: routeInfo.routeId,
@@ -45,7 +50,12 @@ export async function GET(request: NextRequest) {
           plateNo: p.plateNo,
           lowPlate: p.lowPlate,
           crowded: p.crowded,
-          direction: p.direction, // 0=상행(기점→종점), 1=하행(종점→기점)
+          // direction이 있으면 그대로 사용, 없으면 정류소 순번으로 추론
+          // 정류소 순번이 중간점 이하 = 기점에서 회차점으로 이동 중 = 기점방향(1)
+          // 정류소 순번이 중간점 초과 = 회차점에서 기점으로 이동 중 = 종점방향(0)
+          direction: p.direction !== undefined
+            ? p.direction
+            : (p.stationSeq <= midPoint ? 1 : 0),
         })),
       });
     }
