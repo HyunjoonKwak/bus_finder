@@ -1,53 +1,60 @@
-# Build stage
-FROM node:20-alpine AS builder
+# syntax=docker/dockerfile:1
 
+# ===========================================
+# Bus Finder - Production Dockerfile
+# ===========================================
+# Multi-stage build for optimized Next.js standalone deployment
+# node-cron 내장으로 별도 cron daemon 불필요
+
+# Stage 1: Dependencies
+FROM node:20-alpine AS deps
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# Install dependencies
-COPY package*.json ./
+COPY package.json package-lock.json* ./
 RUN npm ci
 
-# Copy source files
-COPY . .
-
-# Build Next.js app
-RUN npm run build
-
-# Production stage
-FROM node:20-alpine AS runner
-
+# Stage 2: Builder
+FROM node:20-alpine AS builder
 WORKDIR /app
 
-# Install cron
-RUN apk add --no-cache dcron
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
 
-# Create non-root user
+# Build arguments for environment variables
+ARG NEXT_PUBLIC_SUPABASE_URL
+ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
+ARG NEXT_PUBLIC_KAKAO_MAP_API_KEY
+ARG NEXT_PUBLIC_PUBLICDATA_API_KEY
+
+ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
+ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
+ENV NEXT_PUBLIC_KAKAO_MAP_API_KEY=$NEXT_PUBLIC_KAKAO_MAP_API_KEY
+ENV NEXT_PUBLIC_PUBLICDATA_API_KEY=$NEXT_PUBLIC_PUBLICDATA_API_KEY
+ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN npm run build
+
+# Stage 3: Runner
+FROM node:20-alpine AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+ENV TZ=Asia/Seoul
+
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# Copy built files
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
+# Copy necessary files from builder
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/scripts ./scripts
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-# Setup cron job (5분마다 실행)
-RUN echo "*/5 * * * * cd /app && /usr/local/bin/npx tsx scripts/collect-arrivals.ts >> /var/log/cron.log 2>&1" > /etc/crontabs/root
-
-# Create log file
-RUN touch /var/log/cron.log
-
-# Start script
-COPY --from=builder /app/docker-entrypoint.sh ./
-RUN chmod +x docker-entrypoint.sh
-
-USER root
+USER nextjs
 
 EXPOSE 3000
 
-ENV PORT=3000
-ENV HOSTNAME="0.0.0.0"
-
-CMD ["./docker-entrypoint.sh"]
+CMD ["node", "server.js"]

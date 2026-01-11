@@ -1,6 +1,6 @@
 services:
   bus-finder:
-    build: .
+    image: ghcr.io/${GHCR_USERNAME:-hyunjoonkwak}/bus_finder:${IMAGE_TAG:-latest}
     container_name: bus-finder
     restart: unless-stopped
     ports:
