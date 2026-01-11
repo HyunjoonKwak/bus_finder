@@ -510,30 +510,30 @@ export default function ExplorePage() {
           "shadow-[0_-4px_20px_rgba(0,0,0,0.1)] md:shadow-none",
           // 패널 너비/높이
           isPanelOpen
-            ? "h-[70vh] md:h-auto md:w-96 md:flex-shrink-0"
+            ? "h-[50vh] md:h-auto md:w-96 md:flex-shrink-0"
             : "h-0 md:h-auto md:w-0"
         )}
       >
         {/* 모바일 드래그 핸들 */}
-        <div className="md:hidden flex justify-center py-2">
+        <div className="md:hidden flex justify-center py-1">
           <div className="w-10 h-1 bg-muted-foreground/30 rounded-full" />
         </div>
 
         {/* 탭 헤더 */}
-        <div className="flex-shrink-0 p-3 border-b border-border bg-muted/30">
+        <div className="flex-shrink-0 px-2 pb-2 md:p-3 border-b border-border bg-muted/30">
           <div className="flex gap-1">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
-                  "flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors",
+                  "flex-1 py-1.5 px-2 md:py-2 md:px-3 rounded-lg text-xs md:text-sm font-medium transition-colors",
                   activeTab === tab.id
                     ? "bg-primary text-primary-foreground"
                     : "hover:bg-accent text-muted-foreground"
                 )}
               >
-                <span className="mr-1">{tab.icon}</span>
+                <span className="mr-0.5 md:mr-1">{tab.icon}</span>
                 {tab.label}
                 {tab.id === 'result' && places.length > 0 && (
                   <span className="ml-1 text-xs">({places.length})</span>
