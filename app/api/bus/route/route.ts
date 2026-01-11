@@ -65,7 +65,16 @@ export async function GET(request: NextRequest) {
             interval: odsayResult.lane[0].busInterval,
           } : null,
           stations: odsayResult.stations,
-          realtime: odsayResult.realtime,
+          // ODSay realtime 형식을 공공데이터 API 형식과 통일
+          // ODSay: busDirection (1=정방향/기점→종점, 2=역방향/종점→기점)
+          // 공공데이터: direction (0=상행/기점→종점, 1=하행/종점→기점)
+          realtime: odsayResult.realtime.map((bus) => ({
+            busStationSeq: bus.busStationSeq,
+            plateNo: bus.busPlateNo,
+            lowPlate: false,
+            crowded: undefined,
+            direction: bus.busDirection === 1 ? 0 : bus.busDirection === 2 ? 1 : undefined,
+          })),
         });
       }
     }

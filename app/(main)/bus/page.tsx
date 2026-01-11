@@ -1487,11 +1487,29 @@ function BusPageContent() {
           const station = stations[stationIdx];
           const position = new kakao.maps.LatLng(parseFloat(station.y), parseFloat(station.x));
 
-          // 방향 결정: API 응답의 direction 또는 정류소 순번 기준
-          // direction: 0=상행(기점→종점), 1=하행(종점→기점)
-          const isOutbound = bus.direction === 0 || bus.direction === undefined;
-          const directionLabel = isOutbound ? '▶ 종점방향' : '◀ 기점방향';
-          const directionColor = isOutbound ? '#3B82F6' : '#F97316'; // 파란색/주황색
+          // 방향 결정: API 응답의 direction 기준
+          // direction: 0=상행(기점→종점), 1=하행(종점→기점), undefined=알수없음
+          const hasDirection = bus.direction !== undefined && bus.direction !== null;
+          const isOutbound = bus.direction === 0;
+          const isInbound = bus.direction === 1;
+
+          let directionLabel = '';
+          let directionColor = '#6B7280'; // 기본 회색
+
+          if (hasDirection) {
+            if (isOutbound) {
+              directionLabel = '▶ 종점방향';
+              directionColor = '#3B82F6'; // 파란색
+            } else if (isInbound) {
+              directionLabel = '◀ 기점방향';
+              directionColor = '#F97316'; // 주황색
+            }
+          }
+
+          // 그라데이션 색상 결정
+          const gradientEnd = isOutbound ? '#1D4ED8' : isInbound ? '#EA580C' : '#4B5563';
+          const shadowColor = isOutbound ? 'rgba(59,130,246,0.5)' : isInbound ? 'rgba(249,115,22,0.5)' : 'rgba(107,114,128,0.5)';
+          const bgColor = isOutbound ? 'rgba(59,130,246,0.9)' : isInbound ? 'rgba(249,115,22,0.9)' : 'rgba(107,114,128,0.9)';
 
           const busContent = document.createElement('div');
           busContent.innerHTML = `
@@ -1504,21 +1522,22 @@ function BusPageContent() {
               <div style="
                 width: 36px;
                 height: 36px;
-                background: linear-gradient(135deg, ${directionColor} 0%, ${isOutbound ? '#1D4ED8' : '#EA580C'} 100%);
+                background: linear-gradient(135deg, ${directionColor} 0%, ${gradientEnd} 100%);
                 border: 3px solid white;
                 border-radius: 50%;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                box-shadow: 0 4px 12px ${isOutbound ? 'rgba(59,130,246,0.5)' : 'rgba(249,115,22,0.5)'};
+                box-shadow: 0 4px 12px ${shadowColor};
                 animation: pulse 2s infinite;
               ">
                 <span style="font-size: 16px;">🚌</span>
               </div>
+              ${directionLabel ? `
               <div style="
                 margin-top: 4px;
                 padding: 2px 6px;
-                background: ${isOutbound ? 'rgba(59,130,246,0.9)' : 'rgba(249,115,22,0.9)'};
+                background: ${bgColor};
                 border-radius: 4px;
                 white-space: nowrap;
               ">
@@ -1526,8 +1545,9 @@ function BusPageContent() {
                   ${directionLabel}
                 </span>
               </div>
+              ` : ''}
               <div style="
-                margin-top: 2px;
+                margin-top: ${directionLabel ? '2px' : '4px'};
                 padding: 2px 6px;
                 background: rgba(0,0,0,0.75);
                 border-radius: 4px;
