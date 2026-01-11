@@ -499,14 +499,26 @@ export default function ExplorePage() {
   ];
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
-      {/* 사이드 패널 */}
+    <div className="flex flex-col md:flex-row h-[calc(100vh-3rem)] overflow-hidden">
+      {/* 사이드 패널 - 모바일에서는 하단에서 올라오는 시트 형태 */}
       <div
         className={cn(
-          "flex-shrink-0 bg-background border-r border-border flex flex-col transition-all duration-300",
-          isPanelOpen ? "w-96" : "w-0"
+          "bg-background flex flex-col transition-all duration-300",
+          // 모바일: 하단 시트 스타일
+          "fixed md:relative inset-x-0 bottom-0 md:inset-auto z-20 md:z-auto",
+          "rounded-t-2xl md:rounded-none border-t md:border-t-0 md:border-r border-border",
+          "shadow-[0_-4px_20px_rgba(0,0,0,0.1)] md:shadow-none",
+          // 패널 너비/높이
+          isPanelOpen
+            ? "h-[70vh] md:h-auto md:w-96 md:flex-shrink-0"
+            : "h-0 md:h-auto md:w-0"
         )}
       >
+        {/* 모바일 드래그 핸들 */}
+        <div className="md:hidden flex justify-center py-2">
+          <div className="w-10 h-1 bg-muted-foreground/30 rounded-full" />
+        </div>
+
         {/* 탭 헤더 */}
         <div className="flex-shrink-0 p-3 border-b border-border bg-muted/30">
           <div className="flex gap-1">
