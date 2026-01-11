@@ -16,6 +16,7 @@ interface MobileInfoCardProps {
   onClose: () => void;
   onToggleFavorite?: () => void;
   onRefresh?: () => void;
+  onBusClick?: (arrival: RealtimeArrivalInfo) => void;
 }
 
 export function MobileInfoCard({
@@ -29,6 +30,7 @@ export function MobileInfoCard({
   onClose,
   onToggleFavorite,
   onRefresh,
+  onBusClick,
 }: MobileInfoCardProps) {
   if (type === 'station' && !station) return null;
   if (type === 'bus' && !bus) return null;
@@ -129,7 +131,10 @@ export function MobileInfoCard({
               <div className="space-y-2">
                 {previewArrivals.map((arrival) => (
                   <div key={arrival.routeID} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => onBusClick?.(arrival)}
+                      className="flex items-center gap-2"
+                    >
                       <span className={cn(
                         "px-1.5 py-0.5 rounded text-xs font-bold",
                         getBusTypeStyle(arrival.routeType).bg,
@@ -137,7 +142,7 @@ export function MobileInfoCard({
                       )}>
                         {arrival.routeNm}
                       </span>
-                    </div>
+                    </button>
                     <div className="flex items-center gap-3 text-sm">
                       {arrival.arrival1 && (
                         <span className="text-primary font-medium">

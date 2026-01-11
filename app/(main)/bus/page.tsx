@@ -706,6 +706,7 @@ function BusPageContent() {
             }}
             onToggleFavorite={() => handleFavoriteToggle('station', selectedStation)}
             onRefresh={() => fetchStationArrivals(selectedStation.stationID, selectedStation.arsID)}
+            onBusClick={handleBusFromArrival}
           />
         )}
 
@@ -731,6 +732,21 @@ function BusPageContent() {
           onClose={() => setMobileSearchOpen(false)}
           onSelectStation={handleSelectStation}
           onSelectBus={handleSelectBus}
+          nearbyStations={nearbyStations}
+          loadingNearby={loadingNearby}
+          searchRadius={searchRadius}
+          onRadiusChange={setSearchRadius}
+          onRefreshNearby={() => fetchNearbyStations()}
+          trackingTargets={trackingTargets}
+          loadingTracking={loadingTracking}
+          onRemoveTracking={async (id) => {
+            try {
+              await fetch(`/api/tracking/targets?id=${id}`, { method: 'DELETE' });
+              setTrackingTargets(prev => prev.filter(t => t.id !== id));
+            } catch (error) {
+              console.error('Remove tracking error:', error);
+            }
+          }}
         />
 
         {/* Detail panel */}
