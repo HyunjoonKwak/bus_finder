@@ -319,7 +319,7 @@ export default function TrackingPage() {
           <div className="space-y-1">
             {bgLogs.slice(0, 5).map((log, idx) => (
               <p key={idx} className="text-xs text-muted-foreground">
-                {log.bus_no}번 @ {log.station_name} - {new Date(log.timestamp).toLocaleTimeString('ko-KR')}
+                {log.bus_no}번 @ {log.station_name} - {new Date(log.arrival_time).toLocaleTimeString('ko-KR')}
               </p>
             ))}
           </div>
