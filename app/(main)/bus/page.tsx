@@ -11,10 +11,13 @@ import type { StationInfo, NearbyStationInfo, BusLaneInfo, BusStationInfo, Realt
 import { createClient } from '@/lib/supabase/client';
 import { useSearchStore } from '@/lib/store';
 import { BusSidebar } from '@/components/bus/BusSidebar';
-import { BusBottomSheet } from '@/components/bus/BusBottomSheet';
 import { BusRouteDetail } from '@/components/bus/BusRouteDetail';
 import { StationArrivals } from '@/components/station/StationArrivals';
 import { NearbyStations, NearbyStation } from '@/components/station/NearbyStations';
+import { MobileSearchBar } from '@/components/mobile/MobileSearchBar';
+import { MobileSearchOverlay } from '@/components/mobile/MobileSearchOverlay';
+import { MobileInfoCard } from '@/components/mobile/MobileInfoCard';
+import { MobileDetailPanel } from '@/components/mobile/MobileDetailPanel';
 
 type TabType = 'station' | 'route' | 'search' | 'tracking';
 
@@ -120,6 +123,10 @@ function BusPageContent() {
   const [favoriteStations, setFavoriteStations] = useState<FavoriteStation[]>([]);
   const [favoriteRoutes, setFavoriteRoutes] = useState<FavoriteRoute[]>([]);
   const [user, setUser] = useState<{ id: string } | null>(null);
+
+  // Mobile UI states
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
 
   useEffect(() => {
     const supabase = createClient();
@@ -662,28 +669,112 @@ function BusPageContent() {
         </BusSidebar>
       </div>
 
+      {/* Mobile UI */}
       <div className="md:hidden">
-        <BusBottomSheet>
-          <div className="flex gap-1 mb-4 sticky top-0 bg-background/95 backdrop-blur pt-2 pb-2 z-10">
-            {['station', 'route', 'search', 'tracking'].map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab as TabType)}
-                className={cn(
-                  "flex-1 py-1.5 text-xs font-medium rounded-lg transition-colors border",
-                  activeTab === tab 
-                    ? "bg-primary text-primary-foreground border-primary" 
-                    : "bg-background border-border text-muted-foreground hover:bg-accent"
-                )}
-              >
-                {tab === 'station' ? '정류소' : 
-                 tab === 'route' ? '노선' : 
-                 tab === 'search' ? '길찾기' : '추적'}
-              </button>
-            ))}
-          </div>
-          {renderContent()}
-        </BusBottomSheet>
+        {/* Show search bar when nothing is selected */}
+        {!selectedStation && !selectedBus && (
+          <MobileSearchBar
+            mode={activeTab === 'route' ? 'bus' : activeTab === 'search' ? 'search' : activeTab === 'tracking' ? 'tracking' : 'station'}
+            onModeChange={(mode) => {
+              const tabMap: Record<string, TabType> = { station: 'station', bus: 'route', search: 'search', tracking: 'tracking' };
+              setActiveTab(tabMap[mode] || 'station');
+            }}
+            onSearchFocus={() => setMobileSearchOpen(true)}
+            onCurrentLocation={() => {
+              if (currentLocation && mapInstanceRef.current) {
+                const kakao = window.kakao;
+                mapInstanceRef.current.panTo(new kakao.maps.LatLng(currentLocation.lat, currentLocation.lng));
+                setMapCenter(currentLocation);
+                fetchNearbyStations(currentLocation);
+              }
+            }}
+          />
+        )}
+
+        {/* Info card when station or bus is selected */}
+        {selectedStation && !mobileDetailOpen && (
+          <MobileInfoCard
+            type="station"
+            station={selectedStation}
+            arrivals={stationArrivals}
+            loadingArrivals={loadingArrivals}
+            isFavorite={favoriteStations.some(s => s.station_id === selectedStation.stationID)}
+            onExpand={() => setMobileDetailOpen(true)}
+            onClose={() => {
+              setSelectedStation(null);
+              setStationArrivals([]);
+            }}
+            onToggleFavorite={() => handleFavoriteToggle('station', selectedStation)}
+            onRefresh={() => fetchStationArrivals(selectedStation.stationID, selectedStation.arsID)}
+          />
+        )}
+
+        {selectedBus && !mobileDetailOpen && (
+          <MobileInfoCard
+            type="bus"
+            bus={selectedBus}
+            isFavorite={favoriteRoutes.some(r => r.bus_id === selectedBus.busID)}
+            onExpand={() => setMobileDetailOpen(true)}
+            onClose={() => {
+              setSelectedBus(null);
+              setBusRouteStations([]);
+              if (polylineRef.current) polylineRef.current.setMap(null);
+            }}
+            onToggleFavorite={() => handleFavoriteToggle('route', selectedBus)}
+          />
+        )}
+
+        {/* Search overlay */}
+        <MobileSearchOverlay
+          isOpen={mobileSearchOpen}
+          mode={activeTab === 'route' ? 'bus' : activeTab === 'search' ? 'search' : activeTab === 'tracking' ? 'tracking' : 'station'}
+          onClose={() => setMobileSearchOpen(false)}
+          onSelectStation={handleSelectStation}
+          onSelectBus={handleSelectBus}
+        />
+
+        {/* Detail panel */}
+        <MobileDetailPanel
+          isOpen={mobileDetailOpen}
+          type={selectedStation ? 'station' : 'bus'}
+          station={selectedStation}
+          bus={selectedBus}
+          arrivals={stationArrivals}
+          busStations={busRouteStations}
+          busPositions={busPositions}
+          loadingArrivals={loadingArrivals}
+          loadingBusRoute={loadingBusRoute}
+          countdown={stationCountdown}
+          isFavorite={
+            selectedStation
+              ? favoriteStations.some(s => s.station_id === selectedStation.stationID)
+              : selectedBus
+              ? favoriteRoutes.some(r => r.bus_id === selectedBus.busID)
+              : false
+          }
+          trackingBusIds={stationTrackingBusIds}
+          onClose={() => setMobileDetailOpen(false)}
+          onToggleFavorite={() => {
+            if (selectedStation) handleFavoriteToggle('station', selectedStation);
+            else if (selectedBus) handleFavoriteToggle('route', selectedBus);
+          }}
+          onRefresh={() => {
+            if (selectedStation) fetchStationArrivals(selectedStation.stationID, selectedStation.arsID);
+          }}
+          onBusClick={handleBusFromArrival}
+          onTrackingToggle={handleTrackingToggle}
+          onStationClick={(station) => {
+            const stationInfo: StationInfo = {
+              stationID: station.stationID,
+              stationName: station.stationName,
+              x: station.x,
+              y: station.y,
+              CID: 1,
+            };
+            handleSelectStation(stationInfo);
+            setMobileDetailOpen(false);
+          }}
+        />
       </div>
     </div>
   );
