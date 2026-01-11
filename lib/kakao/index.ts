@@ -1,4 +1,4 @@
-export const KAKAO_MAP_KEY = process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
+export const KAKAO_MAP_KEY = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY;
 
 export function loadKakaoMapScript(): Promise<void> {
   return new Promise((resolve, reject) => {

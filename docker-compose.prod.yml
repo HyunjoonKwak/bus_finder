@@ -16,6 +16,7 @@ services:
       - NEXT_PUBLIC_PUBLICDATA_API_KEY=${NEXT_PUBLIC_PUBLICDATA_API_KEY}
       - KAKAO_REST_API_KEY=${KAKAO_REST_API_KEY}
       - CRON_SECRET=${CRON_SECRET}
+      - TRAFFIC_API_KEY=${TRAFFIC_API_KEY}
       - TZ=Asia/Seoul
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
