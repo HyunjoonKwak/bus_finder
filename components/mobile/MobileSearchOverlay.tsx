@@ -1,16 +1,27 @@
 'use client';
 
 import { useState } from 'react';
-import { ArrowLeft, MapPin, RefreshCw, Bell, BellOff } from 'lucide-react';
+import { ArrowLeft, MapPin, RefreshCw, Bell, BellOff, Clock, Bus, X } from 'lucide-react';
 import { StationSearchInput } from '@/components/station/StationSearchInput';
 import { BusSearchInput } from '@/components/bus/BusSearchInput';
 import { Badge } from '@/components/ui/badge';
-import type { StationInfo, BusLaneInfo, RealtimeArrivalInfo } from '@/lib/odsay/types';
+import type { StationInfo, BusLaneInfo } from '@/lib/odsay/types';
 import { cn } from '@/lib/utils';
 import { getBusTypeStyle } from '@/lib/bus-utils';
 import type { NearbyStation } from '@/components/station/NearbyStations';
 
 type SearchMode = 'station' | 'bus' | 'search' | 'tracking';
+
+interface SearchHistoryItem {
+  type: 'station' | 'bus';
+  id: string;
+  name: string;
+  subInfo?: string;
+  x?: string;
+  y?: string;
+  arsID?: string;
+  timestamp: number;
+}
 
 interface TrackingTarget {
   id: string;
@@ -36,6 +47,10 @@ interface MobileSearchOverlayProps {
   searchRadius?: number;
   onRadiusChange?: (radius: number) => void;
   onRefreshNearby?: () => void;
+  // Search history props
+  searchHistory?: SearchHistoryItem[];
+  onClearHistory?: () => void;
+  onRemoveHistoryItem?: (type: string, id: string) => void;
   // Tracking props
   trackingTargets?: TrackingTarget[];
   loadingTracking?: boolean;
@@ -53,6 +68,9 @@ export function MobileSearchOverlay({
   searchRadius = 500,
   onRadiusChange,
   onRefreshNearby,
+  searchHistory = [],
+  onClearHistory,
+  onRemoveHistoryItem,
   trackingTargets = [],
   loadingTracking,
   onRemoveTracking,
@@ -213,13 +231,126 @@ export function MobileSearchOverlay({
                 <p className="text-sm text-muted-foreground mt-1">지도를 이동해보세요</p>
               </div>
             )}
+
+            {/* Search history for stations */}
+            {searchHistory.filter(h => h.type === 'station').length > 0 && (
+              <div className="mt-6 pt-4 border-t border-border">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-muted-foreground" />
+                    <span className="font-medium text-sm">최근 검색</span>
+                  </div>
+                  {onClearHistory && (
+                    <button
+                      onClick={onClearHistory}
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      전체 삭제
+                    </button>
+                  )}
+                </div>
+                <div className="space-y-1">
+                  {searchHistory.filter(h => h.type === 'station').slice(0, 5).map((item) => (
+                    <div
+                      key={`${item.type}-${item.id}`}
+                      className="flex items-center gap-2 p-2 rounded-lg hover:bg-accent/50"
+                    >
+                      <button
+                        onClick={() => {
+                          onSelectStation({
+                            stationID: item.id,
+                            stationName: item.name,
+                            x: item.x || '',
+                            y: item.y || '',
+                            CID: 1,
+                            arsID: item.arsID,
+                          });
+                          onClose();
+                        }}
+                        className="flex-1 flex items-center gap-2 text-left"
+                      >
+                        <MapPin className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                        <span className="text-sm truncate">{item.name}</span>
+                      </button>
+                      {onRemoveHistoryItem && (
+                        <button
+                          onClick={() => onRemoveHistoryItem(item.type, item.id)}
+                          className="p-1 rounded hover:bg-accent"
+                        >
+                          <X className="w-3.5 h-3.5 text-muted-foreground" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {/* Bus mode - search handles content */}
+        {/* Bus mode - show search history */}
         {mode === 'bus' && (
-          <div className="p-4 text-center text-muted-foreground">
-            버스 번호를 입력하여 검색하세요
+          <div className="p-4">
+            {searchHistory.filter(h => h.type === 'bus').length > 0 ? (
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-muted-foreground" />
+                    <span className="font-medium text-sm">최근 검색</span>
+                  </div>
+                  {onClearHistory && (
+                    <button
+                      onClick={onClearHistory}
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      전체 삭제
+                    </button>
+                  )}
+                </div>
+                <div className="space-y-1">
+                  {searchHistory.filter(h => h.type === 'bus').slice(0, 10).map((item) => (
+                    <div
+                      key={`${item.type}-${item.id}`}
+                      className="flex items-center gap-2 p-2 rounded-lg hover:bg-accent/50"
+                    >
+                      <button
+                        onClick={() => {
+                          onSelectBus({
+                            busID: item.id,
+                            busNo: item.name,
+                            type: 0,
+                            busStartPoint: item.subInfo?.split(' → ')[0] || '',
+                            busEndPoint: item.subInfo?.split(' → ')[1] || '',
+                          } as BusLaneInfo);
+                          onClose();
+                        }}
+                        className="flex-1 flex items-center gap-2 text-left"
+                      >
+                        <Bus className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                        <div className="min-w-0">
+                          <span className="text-sm font-medium">{item.name}</span>
+                          {item.subInfo && (
+                            <p className="text-xs text-muted-foreground truncate">{item.subInfo}</p>
+                          )}
+                        </div>
+                      </button>
+                      {onRemoveHistoryItem && (
+                        <button
+                          onClick={() => onRemoveHistoryItem(item.type, item.id)}
+                          className="p-1 rounded hover:bg-accent"
+                        >
+                          <X className="w-3.5 h-3.5 text-muted-foreground" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="text-center text-muted-foreground py-8">
+                버스 번호를 입력하여 검색하세요
+              </div>
+            )}
           </div>
         )}
 

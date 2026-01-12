@@ -735,8 +735,23 @@ function BusPageContent() {
           nearbyStations={nearbyStations}
           loadingNearby={loadingNearby}
           searchRadius={searchRadius}
-          onRadiusChange={setSearchRadius}
+          onRadiusChange={(radius) => {
+            setSearchRadius(radius);
+            fetchNearbyStations(mapCenter || currentLocation || undefined, radius);
+          }}
           onRefreshNearby={() => fetchNearbyStations()}
+          searchHistory={searchHistory}
+          onClearHistory={() => {
+            setSearchHistory([]);
+            localStorage.removeItem('bus_search_history');
+          }}
+          onRemoveHistoryItem={(type, id) => {
+            setSearchHistory(prev => {
+              const newHistory = prev.filter(h => !(h.type === type && h.id === id));
+              localStorage.setItem('bus_search_history', JSON.stringify(newHistory));
+              return newHistory;
+            });
+          }}
           trackingTargets={trackingTargets}
           loadingTracking={loadingTracking}
           onRemoveTracking={async (id) => {
