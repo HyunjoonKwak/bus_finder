@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import { useSearchStore } from '@/lib/store';
 import { createClient } from '@/lib/supabase/client';
 import { PlaceSearchInput } from '@/components/search/PlaceSearchInput';
+import { VERSION, GIT_HASH } from '@/lib/version';
 
 type TabType = 'favorites' | 'history' | 'commute';
 
@@ -563,7 +564,7 @@ export default function HomePage() {
       {/* Footer */}
       <footer className="text-center text-xs text-muted-foreground py-4 mt-auto border-t border-border/50">
         <p>2026.01. By Specialrisk.</p>
-        <p className="mt-1 opacity-60">v0.1.0 ({process.env.NEXT_PUBLIC_GIT_HASH})</p>
+        <p className="mt-1 opacity-60">v{VERSION} ({GIT_HASH})</p>
       </footer>
     </div>
   );
