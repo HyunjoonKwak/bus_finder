@@ -21,10 +21,12 @@ export function MapContainer({
   onSetOrigin,
   onSetDestination,
 }: MapContainerProps) {
+  /* eslint-disable @typescript-eslint/no-explicit-any */
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
   const clickMarkerRef = useRef<any>(null);
+  /* eslint-enable @typescript-eslint/no-explicit-any */
   const popupRef = useRef<HTMLDivElement>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -76,6 +78,7 @@ export function MapContainer({
           console.log('현재 위치를 가져올 수 없습니다. 기본 위치 사용.');
         }
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const kakao = (window as any).kakao;
         const center = new kakao.maps.LatLng(lat, lng);
         const map = new kakao.maps.Map(mapRef.current, {
@@ -96,6 +99,7 @@ export function MapContainer({
 
         // 지도 클릭 이벤트
         if (onMapClick || showClickMarker) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           kakao.maps.event.addListener(map, 'click', (mouseEvent: any) => {
             const latlng = mouseEvent.latLng;
             const clickLat = latlng.getLat();
@@ -120,6 +124,7 @@ export function MapContainer({
             // 주소 변환 (Geocoder)
             if (kakao.maps.services) {
               const geocoder = new kakao.maps.services.Geocoder();
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               geocoder.coord2Address(clickLng, clickLat, (result: any, status: any) => {
                 let address = '';
                 if (status === kakao.maps.services.Status.OK && result[0]) {

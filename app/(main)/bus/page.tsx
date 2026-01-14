@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { StationSearchInput } from '@/components/station/StationSearchInput';
 import { BusSearchInput } from '@/components/bus/BusSearchInput';
@@ -9,7 +9,6 @@ import { loadKakaoMapScript, getCurrentPosition } from '@/lib/kakao';
 import { cn } from '@/lib/utils';
 import type { StationInfo, NearbyStationInfo, BusLaneInfo, BusStationInfo, RealtimeArrivalInfo } from '@/lib/odsay/types';
 import { createClient } from '@/lib/supabase/client';
-import { useSearchStore } from '@/lib/store';
 import { BusSidebar } from '@/components/bus/BusSidebar';
 import { BusRouteDetail } from '@/components/bus/BusRouteDetail';
 import { StationArrivals } from '@/components/station/StationArrivals';
@@ -18,6 +17,25 @@ import { MobileSearchBar } from '@/components/mobile/MobileSearchBar';
 import { MobileSearchOverlay } from '@/components/mobile/MobileSearchOverlay';
 import { MobileInfoCard } from '@/components/mobile/MobileInfoCard';
 import { MobileDetailPanel } from '@/components/mobile/MobileDetailPanel';
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// Kakao Maps 타입 정의 (SDK가 TypeScript를 완전 지원하지 않아 any 사용)
+type KakaoMap = any;
+type KakaoLatLng = any;
+type KakaoLatLngBounds = any;
+type KakaoOverlay = any;
+type KakaoCircle = any;
+type KakaoPolyline = any;
+type KakaoCustomOverlay = any;
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
+interface BusPosition {
+  stationId: string;
+  stationSeq: number;
+  plateNo: string;
+  remainSeatCnt?: number;
+  congestion?: number;
+}
 
 type TabType = 'station' | 'route' | 'search' | 'tracking';
 
@@ -65,36 +83,21 @@ interface SearchHistoryItem {
   timestamp: number;
 }
 
-interface RouteResult {
-  id: string;
-  origin: { name: string; x?: number; y?: number };
-  destination: { name: string; x?: number; y?: number };
-  totalTime: number;
-  totalDistance?: number;
-  walkTime: number;
-  transferCount: number;
-  fare: number;
-  legs: any[];
-  pathType?: number;
-}
-
-import { MapControls } from '@/components/map/MapControls';
-
 function BusPageContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const mapRef = useRef<HTMLDivElement>(null);
-  const mapInstanceRef = useRef<any>(null);
-  const markersRef = useRef<any[]>([]);
-  const polylineRef = useRef<any>(null);
-  const radiusCircleRef = useRef<any>(null);
-  const centerMarkerRef = useRef<any>(null);
+  const mapInstanceRef = useRef<KakaoMap | null>(null);
+  const markersRef = useRef<KakaoCustomOverlay[]>([]);
+  const polylineRef = useRef<KakaoPolyline | null>(null);
+  const radiusCircleRef = useRef<KakaoCircle | null>(null);
+  const centerMarkerRef = useRef<KakaoCustomOverlay | null>(null);
+  const dragendListenerRef = useRef<(() => void) | null>(null);
 
   const tabParam = searchParams.get('tab') as TabType | null;
   const initialTab = tabParam && ['station', 'route', 'search', 'tracking'].includes(tabParam) ? tabParam : 'station';
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
 
-  const [mapLoaded, setMapLoaded] = useState(false);
+  const [_mapLoaded, setMapLoaded] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number } | null>(null);
   const [userMovedMap, setUserMovedMap] = useState(false);
@@ -103,7 +106,7 @@ function BusPageContent() {
   const [nearbyStations, setNearbyStations] = useState<NearbyStation[]>([]);
   const [loadingNearby, setLoadingNearby] = useState(false);
   const [searchRadius, setSearchRadius] = useState(500);
-  
+
   const [selectedStation, setSelectedStation] = useState<StationInfo | null>(null);
   const [stationArrivals, setStationArrivals] = useState<RealtimeArrivalInfo[]>([]);
   const [loadingArrivals, setLoadingArrivals] = useState(false);
@@ -112,7 +115,7 @@ function BusPageContent() {
 
   const [selectedBus, setSelectedBus] = useState<BusLaneInfo | null>(null);
   const [busRouteStations, setBusRouteStations] = useState<BusStationInfo[]>([]);
-  const [busPositions, setBusPositions] = useState<any[]>([]);
+  const [busPositions, setBusPositions] = useState<BusPosition[]>([]);
   const [loadingBusRoute, setLoadingBusRoute] = useState(false);
 
   const [trackingTargets, setTrackingTargets] = useState<TrackingTargetWithArrival[]>([]);
@@ -189,11 +192,13 @@ function BusPageContent() {
           map: map,
         });
 
-        kakao.maps.event.addListener(map, 'dragend', () => {
+        const dragendHandler = () => {
           const center = map.getCenter();
           setMapCenter({ lat: center.getLat(), lng: center.getLng() });
           setUserMovedMap(true);
-        });
+        };
+        kakao.maps.event.addListener(map, 'dragend', dragendHandler);
+        dragendListenerRef.current = dragendHandler;
 
         setMapLoaded(true);
       } catch (err) {
@@ -201,6 +206,21 @@ function BusPageContent() {
       }
     }
     initMap();
+
+    // Cleanup: 이벤트 리스너 제거
+    return () => {
+      if (mapInstanceRef.current && dragendListenerRef.current) {
+        const kakao = window.kakao;
+        if (kakao?.maps?.event?.removeListener) {
+          kakao.maps.event.removeListener(mapInstanceRef.current, 'dragend', dragendListenerRef.current);
+        }
+      }
+      // 마커 정리
+      markersRef.current.forEach((m) => m.setMap(null));
+      markersRef.current = [];
+      if (radiusCircleRef.current) radiusCircleRef.current.setMap(null);
+      if (polylineRef.current) polylineRef.current.setMap(null);
+    };
   }, []);
 
   const fetchNearbyStations = useCallback(async (center?: { lat: number; lng: number }, radius?: number) => {
@@ -285,7 +305,24 @@ function BusPageContent() {
       const response = await fetch(`/api/bus/arrival?${params.toString()}`);
       const data = await response.json();
       
-      const arrivals: RealtimeArrivalInfo[] = (data.arrivals || []).map((item: any) => ({
+      interface ArrivalApiItem {
+        routeId?: string;
+        routeName: string;
+        routeType: number;
+        predictTimeSec1?: number;
+        locationNo1?: number;
+        plateNo1?: string;
+        remainSeat1?: number;
+        lowPlate1?: number;
+        crowded1?: number;
+        predictTimeSec2?: number;
+        locationNo2?: number;
+        plateNo2?: string;
+        remainSeat2?: number;
+        lowPlate2?: number;
+        crowded2?: number;
+      }
+      const arrivals: RealtimeArrivalInfo[] = (data.arrivals || []).map((item: ArrivalApiItem) => ({
         routeID: item.routeId || '',
         routeNm: item.routeName,
         routeType: item.routeType,
@@ -333,10 +370,10 @@ function BusPageContent() {
       if (mapInstanceRef.current && data.stations?.length > 0) {
         const kakao = window.kakao;
         const map = mapInstanceRef.current;
-        const path = data.stations.map((s: any) => new kakao.maps.LatLng(parseFloat(s.y), parseFloat(s.x)));
-        
+        const path = data.stations.map((s: BusStationInfo) => new kakao.maps.LatLng(parseFloat(s.y), parseFloat(s.x)));
+
         if (polylineRef.current) polylineRef.current.setMap(null);
-        
+
         const polyline = new kakao.maps.Polyline({
           path,
           strokeWeight: 5,
@@ -346,9 +383,9 @@ function BusPageContent() {
         });
         polyline.setMap(map);
         polylineRef.current = polyline;
-        
+
         const bounds = new kakao.maps.LatLngBounds();
-        path.forEach((p: any) => bounds.extend(p));
+        path.forEach((p: KakaoLatLng) => bounds.extend(p));
         map.setBounds(bounds);
       }
     } catch (error) {
@@ -374,7 +411,7 @@ function BusPageContent() {
   }, [user]);
 
   const handleSelectStation = (station: StationInfo | NearbyStationInfo | NearbyStation) => {
-    const arsID = (station as any).arsID || (station as any).arsId;
+    const arsID = 'arsID' in station ? station.arsID : undefined;
     const stationInfo: StationInfo = {
       stationID: station.stationID,
       stationName: station.stationName,
@@ -477,26 +514,27 @@ function BusPageContent() {
     }
   };
 
-  const handleFavoriteToggle = async (type: 'station' | 'route', item: any) => {
+  const handleFavoriteToggle = async (type: 'station' | 'route', item: StationInfo | BusLaneInfo) => {
     if (!user) {
       alert('로그인이 필요합니다.');
       return;
     }
 
-    if (type === 'station') {
-      const isFav = favoriteStations.some(s => s.station_id === item.stationID);
+    if (type === 'station' && 'stationID' in item) {
+      const stationItem = item as StationInfo;
+      const isFav = favoriteStations.some(s => s.station_id === stationItem.stationID);
       if (isFav) {
-        await fetch(`/api/favorites/stations?stationId=${item.stationID}`, { method: 'DELETE' });
-        setFavoriteStations(prev => prev.filter(s => s.station_id !== item.stationID));
+        await fetch(`/api/favorites/stations?stationId=${stationItem.stationID}`, { method: 'DELETE' });
+        setFavoriteStations(prev => prev.filter(s => s.station_id !== stationItem.stationID));
       } else {
         const res = await fetch('/api/favorites/stations', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            station_id: item.stationID,
-            station_name: item.stationName,
-            x: item.x,
-            y: item.y,
+            station_id: stationItem.stationID,
+            station_name: stationItem.stationName,
+            x: stationItem.x,
+            y: stationItem.y,
           }),
         });
         if (res.ok) {
@@ -504,19 +542,20 @@ function BusPageContent() {
           setFavoriteStations(prev => [...prev, data.station]);
         }
       }
-    } else {
-      const isFav = favoriteRoutes.some(r => r.bus_id === item.busID);
+    } else if (type === 'route' && 'busID' in item) {
+      const busItem = item as BusLaneInfo;
+      const isFav = favoriteRoutes.some(r => r.bus_id === busItem.busID);
       if (isFav) {
-        await fetch(`/api/favorites/routes?busId=${item.busID}`, { method: 'DELETE' });
-        setFavoriteRoutes(prev => prev.filter(r => r.bus_id !== item.busID));
+        await fetch(`/api/favorites/routes?busId=${busItem.busID}`, { method: 'DELETE' });
+        setFavoriteRoutes(prev => prev.filter(r => r.bus_id !== busItem.busID));
       } else {
         const res = await fetch('/api/favorites/routes', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            bus_id: item.busID,
-            bus_no: item.busNo,
-            bus_type: item.type,
+            bus_id: busItem.busID,
+            bus_no: busItem.busNo,
+            bus_type: busItem.type,
           }),
         });
         if (res.ok) {

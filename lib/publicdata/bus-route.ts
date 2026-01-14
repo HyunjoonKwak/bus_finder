@@ -254,7 +254,15 @@ export async function searchGyeonggiBusRoute(busNo: string): Promise<BusRouteInf
 
     const routes = Array.isArray(routeList) ? routeList : [routeList];
 
-    return routes.map((route: any) => ({
+    interface GyeonggiRouteResponse {
+      routeId: string | number;
+      routeName: string;
+      routeTypeName: string;
+      startStationName: string;
+      endStationName: string;
+      companyName: string;
+    }
+    return routes.map((route: GyeonggiRouteResponse) => ({
       routeId: String(route.routeId),
       routeName: route.routeName,
       routeType: route.routeTypeName,
@@ -284,7 +292,15 @@ export async function getGyeonggiBusRouteStations(routeId: string): Promise<BusR
 
     const stations = Array.isArray(stationList) ? stationList : [stationList];
 
-    return stations.map((station: any, index: number) => ({
+    interface GyeonggiStationResponse {
+      stationId: string | number;
+      stationName: string;
+      mobileNo?: string;
+      stationSeq?: number;
+      x?: string | number;
+      y?: string | number;
+    }
+    return stations.map((station: GyeonggiStationResponse, index: number) => ({
       stationId: String(station.stationId),
       stationName: station.stationName,
       stationNo: station.mobileNo || undefined,
@@ -314,13 +330,21 @@ export async function getGyeonggiBusPositions(routeId: string): Promise<BusPosit
 
     const buses = Array.isArray(busList) ? busList : [busList];
 
-    return buses.map((bus: any) => ({
+    interface GyeonggiBusResponse {
+      plateNo: string;
+      stationSeq: string | number;
+      stopFlag?: string;
+      lowPlate?: string;
+      crowded?: string | number;
+      upDownFlag?: string | number;
+    }
+    return buses.map((bus: GyeonggiBusResponse) => ({
       plateNo: bus.plateNo,
-      stationSeq: parseInt(bus.stationSeq) || 0,
+      stationSeq: parseInt(String(bus.stationSeq)) || 0,
       stopFlag: bus.stopFlag === '1',
       lowPlate: bus.lowPlate === '1',
-      crowded: bus.crowded ? parseInt(bus.crowded) : undefined,
-      direction: bus.upDownFlag !== undefined ? parseInt(bus.upDownFlag) : undefined, // 경기도: 0=상행, 1=하행
+      crowded: bus.crowded ? parseInt(String(bus.crowded)) : undefined,
+      direction: bus.upDownFlag !== undefined ? parseInt(String(bus.upDownFlag)) : undefined, // 경기도: 0=상행, 1=하행
     }));
   } catch (error) {
     console.error('Gyeonggi bus positions error:', error);

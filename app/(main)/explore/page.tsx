@@ -8,8 +8,78 @@ import { cn } from '@/lib/utils';
 
 declare global {
   interface Window {
-    kakao: any;
+    kakao: kakao.maps.Map & {
+      maps: typeof kakao.maps;
+    };
   }
+}
+
+/* eslint-disable @typescript-eslint/no-namespace, @typescript-eslint/no-explicit-any */
+declare namespace kakao.maps {
+  class Map {
+    constructor(container: HTMLElement, options: { center: LatLng; level: number });
+    setCenter(position: LatLng): void;
+    panTo(position: LatLng): void;
+    getCenter(): LatLng;
+    setLevel(level: number): void;
+    getLevel(): number;
+    setBounds(bounds: LatLngBounds): void;
+  }
+  class LatLng {
+    constructor(lat: number, lng: number);
+    getLat(): number;
+    getLng(): number;
+  }
+  class LatLngBounds {
+    constructor();
+    extend(position: LatLng): void;
+  }
+  class CustomOverlay {
+    constructor(options: { position: LatLng; content: HTMLElement | string; map?: Map; yAnchor?: number; xAnchor?: number; zIndex?: number });
+    setMap(map: Map | null): void;
+  }
+  class Circle {
+    constructor(options: any);
+    setMap(map: Map | null): void;
+  }
+  class Polyline {
+    constructor(options: any);
+    setMap(map: Map | null): void;
+  }
+  class MarkerImage {
+    constructor(src: string, size: Size);
+  }
+  class Size {
+    constructor(width: number, height: number);
+  }
+  namespace services {
+    class Places {
+      constructor(map?: Map);
+      categorySearch(code: string, callback: (data: Place[], status: string) => void, options?: { useMapBounds?: boolean; size?: number }): void;
+      keywordSearch(keyword: string, callback: (data: Place[], status: string) => void, options?: { size?: number }): void;
+    }
+    class Geocoder {
+      addressSearch(address: string, callback: (result: GeocoderResult[], status: string) => void): void;
+    }
+    const Status: {
+      OK: string;
+      ZERO_RESULT: string;
+      ERROR: string;
+    };
+  }
+  namespace event {
+    function addListener(target: Map, type: string, handler: () => void): void;
+    function removeListener(target: Map, type: string, handler: () => void): void;
+  }
+}
+/* eslint-enable @typescript-eslint/no-namespace, @typescript-eslint/no-explicit-any */
+
+interface GeocoderResult {
+  address_name: string;
+  x: string;
+  y: string;
+  address?: { address_name: string };
+  road_address?: { address_name: string };
 }
 
 interface Place {
@@ -45,9 +115,9 @@ type TabType = 'search' | 'category' | 'result';
 
 export default function ExplorePage() {
   const mapRef = useRef<HTMLDivElement>(null);
-  const mapInstanceRef = useRef<any>(null);
-  const markersRef = useRef<any[]>([]);
-  const psRef = useRef<any>(null);
+  const mapInstanceRef = useRef<kakao.maps.Map | null>(null);
+  const markersRef = useRef<kakao.maps.CustomOverlay[]>([]);
+  const psRef = useRef<kakao.maps.services.Places | null>(null);
 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [places, setPlaces] = useState<Place[]>([]);
@@ -60,7 +130,165 @@ export default function ExplorePage() {
   const [activeTab, setActiveTab] = useState<TabType>('search');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
-  const geocoderRef = useRef<any>(null);
+  const geocoderRef = useRef<kakao.maps.services.Geocoder | null>(null);
+
+  // 마커 관련 함수들을 ref로 저장하여 useEffect에서 안전하게 참조
+  const clearMarkersRef = useRef<() => void>(() => {});
+  const displayMarkersRef = useRef<(places: Place[]) => void>(() => {});
+
+  // 마커 제거 함수
+  const clearMarkers = useCallback(() => {
+    markersRef.current.forEach((marker) => marker.setMap(null));
+    markersRef.current = [];
+  }, []);
+
+  // 마커 표시 함수
+  const displayMarkers = useCallback((placesToShow: Place[]) => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    const kakao = window.kakao;
+
+    // 전역 툴팁 요소 생성 (document.body에 추가)
+    let globalTooltip = document.getElementById('explore-global-tooltip');
+    if (!globalTooltip) {
+      globalTooltip = document.createElement('div');
+      globalTooltip.id = 'explore-global-tooltip';
+      globalTooltip.style.cssText = `
+        display: none;
+        position: fixed;
+        padding: 8px 12px;
+        background: rgba(0,0,0,0.9);
+        border-radius: 8px;
+        white-space: nowrap;
+        pointer-events: none;
+        z-index: 99999;
+        transform: translateX(-50%);
+      `;
+
+      const tooltipContent = document.createElement('div');
+      tooltipContent.id = 'explore-tooltip-content';
+
+      const tooltipArrow = document.createElement('div');
+      tooltipArrow.style.cssText = `
+        position: absolute;
+        bottom: -6px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 0;
+        height: 0;
+        border-left: 6px solid transparent;
+        border-right: 6px solid transparent;
+        border-top: 6px solid rgba(0,0,0,0.9);
+      `;
+
+      globalTooltip.appendChild(tooltipContent);
+      globalTooltip.appendChild(tooltipArrow);
+      document.body.appendChild(globalTooltip);
+    }
+
+    placesToShow.forEach((place, idx) => {
+      const position = new kakao.maps.LatLng(parseFloat(place.y), parseFloat(place.x));
+      const isSelected = selectedPlace?.id === place.id;
+
+      const markerContent = document.createElement('div');
+      markerContent.style.cursor = 'pointer';
+
+      const markerEl = document.createElement('div');
+      markerEl.style.cssText = `
+        width: ${isSelected ? '32px' : '28px'};
+        height: ${isSelected ? '32px' : '28px'};
+        background: ${isSelected ? '#3B82F6' : '#EF4444'};
+        border: 2px solid white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        font-weight: bold;
+        color: white;
+        box-shadow: ${isSelected ? '0 4px 12px rgba(59,130,246,0.5)' : '0 2px 6px rgba(0,0,0,0.3)'};
+        transition: all 0.2s ease;
+      `;
+      markerEl.textContent = String(idx + 1);
+
+      markerContent.appendChild(markerEl);
+
+      const customOverlay = new kakao.maps.CustomOverlay({
+        position,
+        content: markerContent,
+        yAnchor: 0.5,
+        xAnchor: 0.5,
+        zIndex: isSelected ? 10 : 1,
+      });
+
+      customOverlay.setMap(map);
+      markersRef.current.push(customOverlay);
+
+      // 호버 이벤트 - 전역 툴팁 사용
+      const handleMouseEnter = () => {
+        const tooltip = document.getElementById('explore-global-tooltip');
+        const tooltipContentEl = document.getElementById('explore-tooltip-content');
+        if (tooltip && tooltipContentEl) {
+          // 거리 포맷팅
+          const formatDist = (d: string) => {
+            const dist = parseInt(d);
+            if (dist >= 1000) return `${(dist / 1000).toFixed(1)}km`;
+            return `${dist}m`;
+          };
+
+          // 툴팁 내용 업데이트 - 결과 리스트와 동일한 정보
+          tooltipContentEl.innerHTML = `
+            <div style="color: white; font-size: 13px; font-weight: 600; margin-bottom: 4px;">${place.place_name}</div>
+            ${place.distance ? `<div style="display: inline-block; background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 4px; font-size: 10px; color: #E5E7EB; margin-bottom: 4px;">${formatDist(place.distance)}</div>` : ''}
+            ${place.category_name ? `<div style="color: #9CA3AF; font-size: 11px;">${place.category_name}</div>` : ''}
+            <div style="color: #9CA3AF; font-size: 11px; margin-top: 2px;">${place.road_address_name || place.address_name}</div>
+            ${place.phone ? `<div style="color: #34D399; font-size: 11px; margin-top: 4px;">📞 ${place.phone}</div>` : ''}
+          `;
+
+          // 마커의 화면 좌표 계산
+          const rect = markerEl.getBoundingClientRect();
+          const tooltipX = rect.left + rect.width / 2;
+          const tooltipY = rect.top - 10;
+
+          tooltip.style.left = `${tooltipX}px`;
+          tooltip.style.top = `${tooltipY}px`;
+          tooltip.style.transform = 'translateX(-50%) translateY(-100%)';
+          tooltip.style.display = 'block';
+        }
+
+        if (!isSelected) {
+          markerEl.style.transform = 'scale(1.15)';
+          markerEl.style.boxShadow = '0 4px 12px rgba(239,68,68,0.5)';
+        }
+      };
+
+      const handleMouseLeave = () => {
+        const tooltip = document.getElementById('explore-global-tooltip');
+        if (tooltip) {
+          tooltip.style.display = 'none';
+        }
+
+        if (!isSelected) {
+          markerEl.style.transform = 'scale(1)';
+          markerEl.style.boxShadow = '0 2px 6px rgba(0,0,0,0.3)';
+        }
+      };
+
+      markerContent.addEventListener('mouseenter', handleMouseEnter);
+      markerContent.addEventListener('mouseleave', handleMouseLeave);
+      markerContent.onclick = () => {
+        setSelectedPlace(place);
+        map.setCenter(position);
+      };
+    });
+  }, [selectedPlace]);
+
+  // ref 업데이트
+  useEffect(() => {
+    clearMarkersRef.current = clearMarkers;
+    displayMarkersRef.current = displayMarkers;
+  }, [clearMarkers, displayMarkers]);
 
   // 지도 초기화
   useEffect(() => {
@@ -137,8 +365,8 @@ export default function ExplorePage() {
           (data: Place[], status: string) => {
             if (status === kakao.maps.services.Status.OK) {
               setPlaces(data);
-              clearMarkers();
-              displayMarkers(data);
+              clearMarkersRef.current();
+              displayMarkersRef.current(data);
             }
           },
           { useMapBounds: true }
@@ -152,150 +380,6 @@ export default function ExplorePage() {
       kakao.maps.event.removeListener(map, 'idle', idleHandler);
     };
   }, [mapLoaded, selectedCategory]);
-
-  const clearMarkers = useCallback(() => {
-    markersRef.current.forEach((marker) => marker.setMap(null));
-    markersRef.current = [];
-  }, []);
-
-  const displayMarkers = useCallback((places: Place[]) => {
-    const map = mapInstanceRef.current;
-    if (!map) return;
-
-    const kakao = window.kakao;
-
-    // 전역 툴팁 요소 생성 (document.body에 추가)
-    let globalTooltip = document.getElementById('explore-global-tooltip');
-    if (!globalTooltip) {
-      globalTooltip = document.createElement('div');
-      globalTooltip.id = 'explore-global-tooltip';
-      globalTooltip.style.cssText = `
-        display: none;
-        position: fixed;
-        padding: 8px 12px;
-        background: rgba(0,0,0,0.9);
-        border-radius: 8px;
-        white-space: nowrap;
-        pointer-events: none;
-        z-index: 99999;
-        transform: translateX(-50%);
-      `;
-
-      const tooltipContent = document.createElement('div');
-      tooltipContent.id = 'explore-tooltip-content';
-
-      const tooltipArrow = document.createElement('div');
-      tooltipArrow.style.cssText = `
-        position: absolute;
-        bottom: -6px;
-        left: 50%;
-        transform: translateX(-50%);
-        width: 0;
-        height: 0;
-        border-left: 6px solid transparent;
-        border-right: 6px solid transparent;
-        border-top: 6px solid rgba(0,0,0,0.9);
-      `;
-
-      globalTooltip.appendChild(tooltipContent);
-      globalTooltip.appendChild(tooltipArrow);
-      document.body.appendChild(globalTooltip);
-    }
-
-    places.forEach((place, idx) => {
-      const position = new kakao.maps.LatLng(parseFloat(place.y), parseFloat(place.x));
-      const isSelected = selectedPlace?.id === place.id;
-
-      const markerContent = document.createElement('div');
-      markerContent.style.cursor = 'pointer';
-
-      const markerEl = document.createElement('div');
-      markerEl.style.cssText = `
-        width: ${isSelected ? '32px' : '28px'};
-        height: ${isSelected ? '32px' : '28px'};
-        background: ${isSelected ? '#3B82F6' : '#EF4444'};
-        border: 2px solid white;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 12px;
-        font-weight: bold;
-        color: white;
-        box-shadow: ${isSelected ? '0 4px 12px rgba(59,130,246,0.5)' : '0 2px 6px rgba(0,0,0,0.3)'};
-        transition: all 0.2s ease;
-      `;
-      markerEl.textContent = String(idx + 1);
-
-      markerContent.appendChild(markerEl);
-
-      const customOverlay = new kakao.maps.CustomOverlay({
-        position,
-        content: markerContent,
-        yAnchor: 0.5,
-        xAnchor: 0.5,
-        zIndex: isSelected ? 10 : 1,
-      });
-
-      customOverlay.setMap(map);
-      markersRef.current.push(customOverlay);
-
-      // 호버 이벤트 - 전역 툴팁 사용
-      markerContent.addEventListener('mouseenter', () => {
-        const tooltip = document.getElementById('explore-global-tooltip');
-        const tooltipContent = document.getElementById('explore-tooltip-content');
-        if (tooltip && tooltipContent) {
-          // 거리 포맷팅
-          const formatDist = (d: string) => {
-            const dist = parseInt(d);
-            if (dist >= 1000) return `${(dist / 1000).toFixed(1)}km`;
-            return `${dist}m`;
-          };
-
-          // 툴팁 내용 업데이트 - 결과 리스트와 동일한 정보
-          tooltipContent.innerHTML = `
-            <div style="color: white; font-size: 13px; font-weight: 600; margin-bottom: 4px;">${place.place_name}</div>
-            ${place.distance ? `<div style="display: inline-block; background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 4px; font-size: 10px; color: #E5E7EB; margin-bottom: 4px;">${formatDist(place.distance)}</div>` : ''}
-            ${place.category_name ? `<div style="color: #9CA3AF; font-size: 11px;">${place.category_name}</div>` : ''}
-            <div style="color: #9CA3AF; font-size: 11px; margin-top: 2px;">${place.road_address_name || place.address_name}</div>
-            ${place.phone ? `<div style="color: #34D399; font-size: 11px; margin-top: 4px;">📞 ${place.phone}</div>` : ''}
-          `;
-
-          // 마커의 화면 좌표 계산
-          const rect = markerEl.getBoundingClientRect();
-          const tooltipX = rect.left + rect.width / 2;
-          const tooltipY = rect.top - 10;
-
-          tooltip.style.left = `${tooltipX}px`;
-          tooltip.style.top = `${tooltipY}px`;
-          tooltip.style.transform = 'translateX(-50%) translateY(-100%)';
-          tooltip.style.display = 'block';
-        }
-
-        if (!isSelected) {
-          markerEl.style.transform = 'scale(1.15)';
-          markerEl.style.boxShadow = '0 4px 12px rgba(239,68,68,0.5)';
-        }
-      });
-
-      markerContent.addEventListener('mouseleave', () => {
-        const tooltip = document.getElementById('explore-global-tooltip');
-        if (tooltip) {
-          tooltip.style.display = 'none';
-        }
-
-        if (!isSelected) {
-          markerEl.style.transform = 'scale(1)';
-          markerEl.style.boxShadow = '0 2px 6px rgba(0,0,0,0.3)';
-        }
-      });
-
-      markerContent.onclick = () => {
-        setSelectedPlace(place);
-        map.setCenter(position);
-      };
-    });
-  }, [selectedPlace]);
 
   const searchCategory = useCallback((categoryCode: string) => {
     if (!psRef.current || !mapInstanceRef.current) return;
@@ -314,7 +398,7 @@ export default function ExplorePage() {
           displayMarkers(data);
           setActiveTab('result');
 
-          if (data.length > 0) {
+          if (data.length > 0 && mapInstanceRef.current) {
             const bounds = new window.kakao.maps.LatLngBounds();
             data.forEach((place) => {
               bounds.extend(new window.kakao.maps.LatLng(parseFloat(place.y), parseFloat(place.x)));
@@ -374,64 +458,19 @@ export default function ExplorePage() {
     return `${d}m`;
   };
 
-  // 주소/키워드 검색
-  const searchByKeyword = useCallback((query: string) => {
-    if (!query.trim() || !psRef.current || !mapInstanceRef.current) return;
-
-    setLoading(true);
-    clearMarkers();
-    setSelectedPlace(null);
-    setSelectedCategory(null);
-
-    // 검색 히스토리에 추가
-    setSearchHistory((prev) => {
-      const filtered = prev.filter((h) => h !== query);
-      return [query, ...filtered].slice(0, 10);
-    });
-
-    // 키워드 검색 (장소 검색)
-    psRef.current.keywordSearch(
-      query,
-      (data: Place[], status: string) => {
-        if (status === window.kakao.maps.services.Status.OK) {
-          setPlaces(data);
-          displayMarkers(data);
-          setActiveTab('result');
-          setLoading(false);
-
-          if (data.length > 0) {
-            const bounds = new window.kakao.maps.LatLngBounds();
-            data.forEach((place) => {
-              bounds.extend(new window.kakao.maps.LatLng(parseFloat(place.y), parseFloat(place.x)));
-            });
-            mapInstanceRef.current.setBounds(bounds);
-          }
-        } else if (status === window.kakao.maps.services.Status.ZERO_RESULT) {
-          // 키워드 검색 결과가 없으면 주소 검색 시도
-          searchByAddress(query);
-        } else {
-          setPlaces([]);
-          setLoading(false);
-          setActiveTab('result');
-        }
-      },
-      { size: 15 }
-    );
-  }, [clearMarkers, displayMarkers]);
-
-  // 주소로 검색
+  // 주소로 검색 (searchByKeyword에서 사용하므로 먼저 선언)
   const searchByAddress = useCallback((query: string) => {
     if (!geocoderRef.current || !mapInstanceRef.current) {
       setLoading(false);
       return;
     }
 
-    geocoderRef.current.addressSearch(query, (result: any[], status: string) => {
+    geocoderRef.current.addressSearch(query, (result: GeocoderResult[], status: string) => {
       setLoading(false);
 
-      if (status === window.kakao.maps.services.Status.OK && result.length > 0) {
+      if (status === window.kakao.maps.services.Status.OK && result.length > 0 && mapInstanceRef.current) {
         const firstResult = result[0];
-        const position = new window.kakao.maps.LatLng(firstResult.y, firstResult.x);
+        const position = new window.kakao.maps.LatLng(parseFloat(firstResult.y), parseFloat(firstResult.x));
 
         // 지도 이동
         mapInstanceRef.current.setCenter(position);
@@ -485,6 +524,51 @@ export default function ExplorePage() {
       }
     });
   }, [clearMarkers]);
+
+  // 주소/키워드 검색
+  const searchByKeyword = useCallback((query: string) => {
+    if (!query.trim() || !psRef.current || !mapInstanceRef.current) return;
+
+    setLoading(true);
+    clearMarkers();
+    setSelectedPlace(null);
+    setSelectedCategory(null);
+
+    // 검색 히스토리에 추가
+    setSearchHistory((prev) => {
+      const filtered = prev.filter((h) => h !== query);
+      return [query, ...filtered].slice(0, 10);
+    });
+
+    // 키워드 검색 (장소 검색)
+    psRef.current.keywordSearch(
+      query,
+      (data: Place[], status: string) => {
+        if (status === window.kakao.maps.services.Status.OK) {
+          setPlaces(data);
+          displayMarkers(data);
+          setActiveTab('result');
+          setLoading(false);
+
+          if (data.length > 0 && mapInstanceRef.current) {
+            const bounds = new window.kakao.maps.LatLngBounds();
+            data.forEach((place) => {
+              bounds.extend(new window.kakao.maps.LatLng(parseFloat(place.y), parseFloat(place.x)));
+            });
+            mapInstanceRef.current.setBounds(bounds);
+          }
+        } else if (status === window.kakao.maps.services.Status.ZERO_RESULT) {
+          // 키워드 검색 결과가 없으면 주소 검색 시도
+          searchByAddress(query);
+        } else {
+          setPlaces([]);
+          setLoading(false);
+          setActiveTab('result');
+        }
+      },
+      { size: 15 }
+    );
+  }, [clearMarkers, displayMarkers, searchByAddress]);
 
   // 검색 폼 제출
   const handleSearchSubmit = (e: React.FormEvent) => {

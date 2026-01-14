@@ -13,6 +13,14 @@ export interface StationInfo {
   distance?: number; // 거리 (미터)
 }
 
+interface GyeonggiStationResponse {
+  stationId: string | number;
+  stationName: string;
+  mobileNo?: string;
+  x?: string | number;
+  y?: string | number;
+}
+
 function getApiKey(): string {
   const apiKey = process.env.TRAFFIC_API_KEY;
   if (!apiKey) {
@@ -54,7 +62,7 @@ export async function searchGyeonggiStation(keyword: string): Promise<StationInf
 
     const stations = Array.isArray(stationList) ? stationList : [stationList];
 
-    return stations.map((station: any) => ({
+    return stations.map((station: GyeonggiStationResponse) => ({
       stationId: String(station.stationId),
       stationName: station.stationName,
       arsId: station.mobileNo || undefined,
@@ -93,7 +101,7 @@ export async function searchGyeonggiNearbyStations(
     const stations = Array.isArray(stationList) ? stationList : [stationList];
 
     return stations
-      .map((station: any) => {
+      .map((station: GyeonggiStationResponse) => {
         const stationX = station.x ? parseFloat(String(station.x)) : 0;
         const stationY = station.y ? parseFloat(String(station.y)) : 0;
         const distance = calculateDistance(y, x, stationY, stationX);

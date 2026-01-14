@@ -47,7 +47,7 @@ export default function BusDetailPage() {
   const [busInfo, setBusInfo] = useState<RouteInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [isFavorite, setIsFavorite] = useState(false);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<{ id: string } | null>(null);
   const [countdown, setCountdown] = useState(REFRESH_INTERVAL);
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -114,12 +114,13 @@ export default function BusDetailPage() {
     };
   }, [busId, fetchBusDetail]);
 
-  const checkFavorite = async (userId: string) => {
+  const checkFavorite = async (_userId: string) => {
     try {
       const response = await fetch(`/api/favorites/routes`);
       const data = await response.json();
-      const favorites = data.routes || [];
-      setIsFavorite(favorites.some((f: any) => f.bus_id === busId));
+      interface FavoriteRoute { bus_id: string; bus_no: string }
+      const favorites: FavoriteRoute[] = data.routes || [];
+      setIsFavorite(favorites.some((f) => f.bus_id === busId));
     } catch (error) {
       console.error('Check favorite error:', error);
     }

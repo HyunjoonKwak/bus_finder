@@ -85,8 +85,13 @@ async function main() {
 
       for (const target of stationTargets) {
         // 버스 노선 찾기
+        interface ArrivalData {
+          routeID?: string | number;
+          routeNm?: string;
+          arrival1?: { arrivalSec: number };
+        }
         const busArrival = arrivals.find(
-          (a: any) => a.routeID?.toString() === target.bus_id || a.routeNm === target.bus_no
+          (a: ArrivalData) => a.routeID?.toString() === target.bus_id || a.routeNm === target.bus_no
         );
 
         if (!busArrival) continue;

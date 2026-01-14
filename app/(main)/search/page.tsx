@@ -2,7 +2,6 @@
 
 import { Suspense, useEffect, useState, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { SearchForm } from '@/components/search/SearchForm';
 import { cn } from '@/lib/utils';
@@ -50,6 +49,7 @@ function SearchContent() {
   const dest = searchParams.get('dest');
 
   const mapRef = useRef<HTMLDivElement>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mapInstanceRef = useRef<any>(null);
 
   const [routes, setRoutes] = useState<RouteResult[]>([]);

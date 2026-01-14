@@ -15,6 +15,21 @@ interface PendingArrival {
   timestamp: number;
 }
 
+interface TrackingTarget {
+  bus_id: string;
+  bus_no: string;
+  station_id: string;
+  station_name: string;
+  ars_id?: string;
+  is_active: boolean;
+}
+
+interface ArrivalInfo {
+  routeId?: string;
+  routeName?: string;
+  predictTime1?: number;
+}
+
 export function BackgroundCollector() {
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const isInitializedRef = useRef(false);
@@ -22,6 +37,40 @@ export function BackgroundCollector() {
   const recentlyLoggedRef = useRef<Map<string, number>>(new Map());
   // 곧 도착 상태였던 버스 추적 (bus_id|station_id -> PendingArrival)
   const pendingArrivalsRef = useRef<Map<string, PendingArrival>>(new Map());
+
+  // logArrival을 collectArrivals보다 먼저 선언
+  const logArrival = useCallback(async (pending: PendingArrival, now: number) => {
+    const logKey = `${pending.bus_id}|${pending.station_id}`;
+
+    // 중복 기록 방지
+    const lastLoggedTime = recentlyLoggedRef.current.get(logKey);
+    if (lastLoggedTime && now - lastLoggedTime < DUPLICATE_PREVENTION_TIME) {
+      console.log(`[BG] Skipped (duplicate): ${pending.bus_no} @ ${pending.station_name}`);
+      return;
+    }
+
+    try {
+      const arrivalTime = new Date().toISOString();
+      const logResponse = await fetch('/api/tracking/logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bus_id: pending.bus_id,
+          bus_no: pending.bus_no,
+          station_id: pending.station_id,
+          station_name: pending.station_name,
+          arrival_time: arrivalTime,
+        }),
+      });
+
+      if (logResponse.ok) {
+        recentlyLoggedRef.current.set(logKey, now);
+        console.log(`[BG] Logged: ${pending.bus_no} @ ${pending.station_name}`);
+      }
+    } catch (logError) {
+      console.error('[BG] Log error:', logError);
+    }
+  }, []);
 
   const collectArrivals = useCallback(async () => {
     try {
@@ -38,7 +87,7 @@ export function BackgroundCollector() {
       if (!targetsResponse.ok) return;
 
       const targetsData = await targetsResponse.json();
-      const activeTargets = (targetsData.targets || []).filter((t: any) => t.is_active);
+      const activeTargets = (targetsData.targets || []).filter((t: TrackingTarget) => t.is_active);
 
       if (activeTargets.length === 0) {
         return;
@@ -46,7 +95,7 @@ export function BackgroundCollector() {
 
       console.log('[BG] Collecting arrivals...');
 
-      const stationMap = new Map<string, any[]>();
+      const stationMap = new Map<string, TrackingTarget[]>();
       for (const target of activeTargets) {
         const key = `${target.station_id}|${target.ars_id || ''}`;
         const existing = stationMap.get(key) || [];
@@ -72,7 +121,7 @@ export function BackgroundCollector() {
           for (const target of stationTargets) {
             const logKey = `${target.bus_id}|${target.station_id}`;
 
-            const busArrival = arrivals.find((a: any) => {
+            const busArrival = arrivals.find((a: ArrivalInfo) => {
               const aRouteId = String(a.routeId || '');
               const aRouteName = String(a.routeName || '');
               const tBusId = String(target.bus_id || '');
@@ -138,40 +187,7 @@ export function BackgroundCollector() {
     } catch (error) {
       console.error('[BG] Collection error:', error);
     }
-  }, []);
-
-  const logArrival = async (pending: PendingArrival, now: number) => {
-    const logKey = `${pending.bus_id}|${pending.station_id}`;
-
-    // 중복 기록 방지
-    const lastLoggedTime = recentlyLoggedRef.current.get(logKey);
-    if (lastLoggedTime && now - lastLoggedTime < DUPLICATE_PREVENTION_TIME) {
-      console.log(`[BG] Skipped (duplicate): ${pending.bus_no} @ ${pending.station_name}`);
-      return;
-    }
-
-    try {
-      const arrivalTime = new Date().toISOString();
-      const logResponse = await fetch('/api/tracking/logs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          bus_id: pending.bus_id,
-          bus_no: pending.bus_no,
-          station_id: pending.station_id,
-          station_name: pending.station_name,
-          arrival_time: arrivalTime,
-        }),
-      });
-
-      if (logResponse.ok) {
-        recentlyLoggedRef.current.set(logKey, now);
-        console.log(`[BG] Logged: ${pending.bus_no} @ ${pending.station_name}`);
-      }
-    } catch (logError) {
-      console.error('[BG] Log error:', logError);
-    }
-  };
+  }, [logArrival]);
 
   useEffect(() => {
     if (isInitializedRef.current) return;

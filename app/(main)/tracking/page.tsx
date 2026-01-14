@@ -110,7 +110,13 @@ export default function TrackingPage() {
 
         for (const target of stationTargets) {
           // 버스 매칭 - routeId 또는 routeName으로 찾기 (타입 변환 적용)
-          const busArrival = arrivals.find((a: any) => {
+          interface ArrivalInfo {
+            routeId?: string;
+            routeName?: string;
+            predictTime1?: number;
+            locationNo1?: number;
+          }
+          const busArrival = arrivals.find((a: ArrivalInfo) => {
             const aRouteId = String(a.routeId || '');
             const aRouteName = String(a.routeName || '');
             const tBusId = String(target.bus_id || '');

@@ -8,8 +8,8 @@ import type { BusLaneInfo } from '@/lib/odsay/types';
 
 export default function BusSearchPage() {
   const router = useRouter();
-  const [searchResults, setSearchResults] = useState<BusLaneInfo[]>([]);
-  const [hasSearched, setHasSearched] = useState(false);
+  const [searchResults, _setSearchResults] = useState<BusLaneInfo[]>([]);
+  const [hasSearched, _setHasSearched] = useState(false);
 
   const handleSelect = (bus: BusLaneInfo) => {
     router.push(`/bus/${bus.busID}?no=${encodeURIComponent(bus.busNo)}`);

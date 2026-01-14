@@ -44,7 +44,25 @@ function StationDetailContent() {
       const data = await response.json();
 
       // 응답 형식을 RealtimeArrivalInfo로 변환
-      const formattedArrivals = (data.arrivals || []).map((item: any) => ({
+      interface ArrivalApiItem {
+        routeId?: string;
+        routeName?: string;
+        routeType?: number;
+        predictTimeSec1?: number;
+        predictTimeSec2?: number;
+        locationNo1?: number;
+        locationNo2?: number;
+        direction?: string;
+        plateNo1?: string;
+        plateNo2?: string;
+        remainSeat1?: number;
+        remainSeat2?: number;
+        lowPlate1?: boolean;
+        lowPlate2?: boolean;
+        crowded1?: number;
+        crowded2?: number;
+      }
+      const formattedArrivals = (data.arrivals || []).map((item: ArrivalApiItem) => ({
         routeID: item.routeId || '',
         routeNm: item.routeName,
         routeType: item.routeType,
@@ -146,8 +164,9 @@ function StationDetailContent() {
       const response = await fetch(`/api/favorites/stations`);
       const data = await response.json();
       const favorites = data.stations || [];
+      interface FavoriteStationItem { station_id: string }
       setIsFavorite(
-        favorites.some((f: any) => f.station_id === stationId)
+        favorites.some((f: FavoriteStationItem) => f.station_id === stationId)
       );
     } catch (error) {
       console.error('Check favorite error:', error);

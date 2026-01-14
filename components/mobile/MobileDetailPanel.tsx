@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+// React hooks not currently used but may be needed for future enhancements
 import { Drawer } from 'vaul';
 import { ArrowLeft, Star, RefreshCw, Bell, BellOff, MapPin, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -15,7 +15,7 @@ interface MobileDetailPanelProps {
   bus?: BusLaneInfo | null;
   arrivals?: RealtimeArrivalInfo[];
   busStations?: BusStationInfo[];
-  busPositions?: any[];
+  busPositions?: { stationSeq: number; busStationSeq?: number; sectionOrder?: number; plateNo?: string; lowPlate?: boolean; crowded?: number }[];
   loadingArrivals?: boolean;
   loadingBusRoute?: boolean;
   countdown?: number;

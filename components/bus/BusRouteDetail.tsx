@@ -5,10 +5,18 @@ import { cn } from '@/lib/utils';
 import type { BusLaneInfo, BusStationInfo } from '@/lib/odsay/types';
 import { getBusTypeStyle, getCrowdedInfo } from '@/lib/bus-utils';
 
+interface BusPosition {
+  stationId: string;
+  stationSeq: number;
+  plateNo: string;
+  remainSeatCnt?: number;
+  congestion?: number;
+}
+
 interface BusRouteDetailProps {
   bus: BusLaneInfo;
   stations: BusStationInfo[];
-  realtimePositions: any[];
+  realtimePositions: BusPosition[];
   isFavorite: boolean;
   onToggleFavorite: () => void;
   onClose: () => void;

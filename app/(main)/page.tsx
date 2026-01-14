@@ -34,7 +34,7 @@ interface HistoryItem {
   dest_name: string;
   boarded_at: string;
   total_time: number | null;
-  route_data: any;
+  route_data: Record<string, unknown>;
 }
 
 interface CommuteRoute {
@@ -50,16 +50,6 @@ interface CommuteRoute {
   created_at: string;
 }
 
-interface Place {
-  id: string;
-  name: string;
-  address: string;
-  roadAddress: string;
-  category: string;
-  x: string;
-  y: string;
-}
-
 const quickMenus = [
   { href: '/bus', label: '정류소', icon: '🚏', description: '도착 정보' },
   { href: '/bus?tab=route', label: '노선', icon: '🚌', description: '노선 조회' },
@@ -71,7 +61,7 @@ export default function HomePage() {
   const router = useRouter();
   const { recentSearches, clearSearches } = useSearchStore();
 
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<{ id: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>('favorites');
 

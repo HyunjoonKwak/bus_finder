@@ -16,6 +16,7 @@ export function ServiceWorkerRegistration() {
               .query({ name: 'periodic-background-sync' as PermissionName })
               .then((status) => {
                 if (status.state === 'granted') {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   (registration as any).periodicSync.register('collect-arrivals', {
                     minInterval: 5 * 60 * 1000, // 5분
                   });

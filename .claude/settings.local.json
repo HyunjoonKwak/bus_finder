@@ -22,7 +22,17 @@
       "Bash(source /Users/specialrisk_mac/code_work/bus_finder/.env.local)",
       "Bash(npx tsc:*)",
       "Bash(tail:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(source .env.local)",
+      "Bash(cat:*)",
+      "Bash(mkdir:*)",
+      "Bash(docker info:*)",
+      "Bash(open:*)",
+      "Bash(./manage.sh:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(npm run lint:*)",
+      "Bash(npm audit:*)"
     ]
-  }
+  },
+  "outputStyle": "default"
 }

@@ -27,6 +27,7 @@ function SearchFormContent({ variant = 'default', onSearch }: SearchFormContentP
   const [destPlace, setDestPlace] = useState<SelectedPlace | null>(null);
 
   // URL 파라미터에서 선택된 위치 정보 가져오기
+  // Note: URL 파라미터를 state로 동기화하는 초기화 패턴으로, 의도적인 설계임
   useEffect(() => {
     const sname = searchParams.get('sname');
     const ename = searchParams.get('ename');
@@ -35,18 +36,20 @@ function SearchFormContent({ variant = 'default', onSearch }: SearchFormContentP
     const ex = searchParams.get('ex');
     const ey = searchParams.get('ey');
 
-    if (sname) {
+    // 변경이 필요한 경우에만 state 업데이트
+    if (sname && sname !== origin) {
       setOrigin(sname);
-      if (sx && sy) {
-        setOriginPlace({ name: sname, x: sx, y: sy });
-      }
     }
-    if (ename) {
+    if (sname && sx && sy && (!originPlace || originPlace.name !== sname)) {
+      setOriginPlace({ name: sname, x: sx, y: sy });
+    }
+    if (ename && ename !== destination) {
       setDestination(ename);
-      if (ex && ey) {
-        setDestPlace({ name: ename, x: ex, y: ey });
-      }
     }
+    if (ename && ex && ey && (!destPlace || destPlace.name !== ename)) {
+      setDestPlace({ name: ename, x: ex, y: ey });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- URL 파라미터 초기화용, origin/destination 추가시 무한 루프
   }, [searchParams]);
 
   const handleSubmit = (e: React.FormEvent) => {
