@@ -157,7 +157,7 @@ export function BusRouteDetail({
 
       {/* 정류소 목록 */}
       {showStations && stations.length > 0 && (
-        <div className="mt-3 max-h-80 overflow-y-auto bg-white/10 backdrop-blur rounded-lg">
+        <div className="mt-3 max-h-80 overflow-y-auto bg-white/95 dark:bg-gray-900/95 backdrop-blur rounded-lg shadow-inner">
           {stations.map((station, idx) => {
             const busAtStation = realtimePositions.filter(p => p.busStationSeq === (station.idx || idx + 1));
             const isFirst = idx === 0;
@@ -167,8 +167,8 @@ export function BusRouteDetail({
               <div
                 key={station.stationID}
                 className={cn(
-                  "px-3 py-2 border-b border-white/10 last:border-b-0",
-                  busAtStation.length > 0 && "bg-white/15"
+                  "px-3 py-2 border-b border-gray-200 dark:border-gray-700 last:border-b-0",
+                  busAtStation.length > 0 && "bg-blue-50 dark:bg-blue-900/30"
                 )}
               >
                 <div className="flex items-center gap-3">
@@ -179,9 +179,9 @@ export function BusRouteDetail({
                     ) : (
                       <span className={cn(
                         "text-xs font-medium",
-                        isFirst && "text-green-300",
-                        isLast && "text-red-300",
-                        !isFirst && !isLast && "text-white/60"
+                        isFirst && "text-green-600 dark:text-green-400",
+                        isLast && "text-red-600 dark:text-red-400",
+                        !isFirst && !isLast && "text-gray-500 dark:text-gray-400"
                       )}>
                         {station.idx || idx + 1}
                       </span>
@@ -191,15 +191,15 @@ export function BusRouteDetail({
                   {/* 정류소명 */}
                   <div className="flex-1 min-w-0">
                     <p className={cn(
-                      "text-sm truncate",
-                      isFirst && "text-green-300 font-medium",
-                      isLast && "text-red-300 font-medium"
+                      "text-sm truncate text-gray-900 dark:text-gray-100",
+                      isFirst && "text-green-700 dark:text-green-400 font-medium",
+                      isLast && "text-red-700 dark:text-red-400 font-medium"
                     )}>
                       {isFirst && '🚏 '}{isLast && '🏁 '}
                       {station.stationName}
                     </p>
                     {station.arsID && (
-                      <p className="text-xs text-white/50">{station.arsID}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{station.arsID}</p>
                     )}
                   </div>
                 </div>
@@ -215,17 +215,17 @@ export function BusRouteDetail({
                           key={busIdx}
                           className={cn(
                             "inline-flex items-center gap-2 px-2 py-1 rounded text-xs",
-                            isOutbound && "bg-blue-500/30",
-                            isInbound && "bg-orange-500/30",
-                            !isOutbound && !isInbound && "bg-gray-500/30"
+                            isOutbound && "bg-blue-100 dark:bg-blue-800/50 text-blue-800 dark:text-blue-200",
+                            isInbound && "bg-orange-100 dark:bg-orange-800/50 text-orange-800 dark:text-orange-200",
+                            !isOutbound && !isInbound && "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
                           )}
                         >
                           <span className="font-medium">
                             {bus.plateNo || '차량번호 없음'}
                           </span>
                           {bus.lowPlate && <span>🦽</span>}
-                          {isOutbound && <span className="text-blue-300">▶종점</span>}
-                          {isInbound && <span className="text-orange-300">◀기점</span>}
+                          {isOutbound && <span className="text-blue-600 dark:text-blue-300">▶종점</span>}
+                          {isInbound && <span className="text-orange-600 dark:text-orange-300">◀기점</span>}
                         </div>
                       );
                     })}
