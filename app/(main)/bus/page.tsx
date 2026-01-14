@@ -11,6 +11,7 @@ import type { StationInfo, NearbyStationInfo, BusLaneInfo, BusStationInfo, Realt
 import { createClient } from '@/lib/supabase/client';
 import { BusSidebar } from '@/components/bus/BusSidebar';
 import { BusRouteDetail } from '@/components/bus/BusRouteDetail';
+import { BusStationList } from '@/components/bus/BusStationList';
 import { StationArrivals } from '@/components/station/StationArrivals';
 import { NearbyStations, NearbyStation } from '@/components/station/NearbyStations';
 import { MobileBottomSheet } from '@/components/mobile/MobileBottomSheet';
@@ -878,18 +879,37 @@ function BusPageContent() {
       )}
 
       {selectedBus && activeTab === 'route' && (
-        <BusRouteDetail
-          bus={selectedBus}
-          stations={busRouteStations}
-          realtimePositions={busPositions}
-          isFavorite={favoriteRoutes.some(r => r.bus_id === selectedBus.busID)}
-          onToggleFavorite={() => handleFavoriteToggle('route', selectedBus)}
-          onClose={() => {
-            setSelectedBus(null);
-            setBusRouteStations([]);
-            if (polylineRef.current) polylineRef.current.setMap(null);
-          }}
-        />
+        <div className="space-y-3">
+          <BusRouteDetail
+            bus={selectedBus}
+            stations={busRouteStations}
+            realtimePositions={busPositions}
+            isFavorite={favoriteRoutes.some(r => r.bus_id === selectedBus.busID)}
+            onToggleFavorite={() => handleFavoriteToggle('route', selectedBus)}
+            onClose={() => {
+              setSelectedBus(null);
+              setBusRouteStations([]);
+              if (polylineRef.current) polylineRef.current.setMap(null);
+            }}
+          />
+          {busRouteStations.length > 0 && (
+            <BusStationList
+              stations={busRouteStations}
+              realtimePositions={busPositions}
+              onStationClick={(station) => {
+                const stationInfo: StationInfo = {
+                  stationID: station.stationID,
+                  stationName: station.stationName,
+                  x: station.x,
+                  y: station.y,
+                  CID: 1,
+                  arsID: station.arsID,
+                };
+                handleSelectStation(stationInfo);
+              }}
+            />
+          )}
+        </div>
       )}
 
       {selectedStation && activeTab === 'station' && (
