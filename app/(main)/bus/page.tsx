@@ -138,8 +138,14 @@ function BusPageContent() {
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getUser().then(({ data: { user } }) => setUser(user));
-    
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setUser(user);
+      if (user) {
+        // 즐겨찾기 목록 로드
+        fetchFavorites();
+      }
+    });
+
     const saved = localStorage.getItem('bus_search_history');
     if (saved) {
       try {
@@ -149,6 +155,26 @@ function BusPageContent() {
       }
     }
   }, []);
+
+  const fetchFavorites = async () => {
+    try {
+      const [stationsRes, routesRes] = await Promise.all([
+        fetch('/api/favorites/stations'),
+        fetch('/api/favorites/routes'),
+      ]);
+
+      if (stationsRes.ok) {
+        const data = await stationsRes.json();
+        setFavoriteStations(data.stations || []);
+      }
+      if (routesRes.ok) {
+        const data = await routesRes.json();
+        setFavoriteRoutes(data.routes || []);
+      }
+    } catch (error) {
+      console.error('Fetch favorites error:', error);
+    }
+  };
 
   const addToHistory = useCallback((item: Omit<SearchHistoryItem, 'timestamp'>) => {
     setSearchHistory((prev) => {
@@ -698,50 +724,79 @@ function BusPageContent() {
       return;
     }
 
-    if (type === 'station' && 'stationID' in item) {
-      const stationItem = item as StationInfo;
-      const isFav = favoriteStations.some(s => s.station_id === stationItem.stationID);
-      if (isFav) {
-        await fetch(`/api/favorites/stations?stationId=${stationItem.stationID}`, { method: 'DELETE' });
-        setFavoriteStations(prev => prev.filter(s => s.station_id !== stationItem.stationID));
-      } else {
-        const res = await fetch('/api/favorites/stations', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            station_id: stationItem.stationID,
-            station_name: stationItem.stationName,
-            x: stationItem.x,
-            y: stationItem.y,
-          }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setFavoriteStations(prev => [...prev, data.station]);
+    try {
+      if (type === 'station' && 'stationID' in item) {
+        const stationItem = item as StationInfo;
+        const isFav = favoriteStations.some(s => s.station_id === stationItem.stationID);
+        if (isFav) {
+          const res = await fetch(`/api/favorites/stations?stationId=${stationItem.stationID}`, { method: 'DELETE' });
+          if (res.ok) {
+            setFavoriteStations(prev => prev.filter(s => s.station_id !== stationItem.stationID));
+            showToast('즐겨찾기에서 삭제됨');
+          } else {
+            showToast('삭제 실패', true);
+          }
+        } else {
+          const res = await fetch('/api/favorites/stations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              station_id: stationItem.stationID,
+              station_name: stationItem.stationName,
+              x: stationItem.x,
+              y: stationItem.y,
+            }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setFavoriteStations(prev => [...prev, data.station]);
+            showToast('즐겨찾기에 추가됨');
+          } else {
+            showToast('추가 실패', true);
+          }
+        }
+      } else if (type === 'route' && 'busID' in item) {
+        const busItem = item as BusLaneInfo;
+        const isFav = favoriteRoutes.some(r => r.bus_id === busItem.busID);
+        if (isFav) {
+          const res = await fetch(`/api/favorites/routes?busId=${busItem.busID}`, { method: 'DELETE' });
+          if (res.ok) {
+            setFavoriteRoutes(prev => prev.filter(r => r.bus_id !== busItem.busID));
+            showToast('즐겨찾기에서 삭제됨');
+          } else {
+            showToast('삭제 실패', true);
+          }
+        } else {
+          const res = await fetch('/api/favorites/routes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              bus_id: busItem.busID,
+              bus_no: busItem.busNo,
+              bus_type: busItem.type,
+            }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setFavoriteRoutes(prev => [...prev, data.route]);
+            showToast('즐겨찾기에 추가됨');
+          } else {
+            showToast('추가 실패', true);
+          }
         }
       }
-    } else if (type === 'route' && 'busID' in item) {
-      const busItem = item as BusLaneInfo;
-      const isFav = favoriteRoutes.some(r => r.bus_id === busItem.busID);
-      if (isFav) {
-        await fetch(`/api/favorites/routes?busId=${busItem.busID}`, { method: 'DELETE' });
-        setFavoriteRoutes(prev => prev.filter(r => r.bus_id !== busItem.busID));
-      } else {
-        const res = await fetch('/api/favorites/routes', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            bus_id: busItem.busID,
-            bus_no: busItem.busNo,
-            bus_type: busItem.type,
-          }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setFavoriteRoutes(prev => [...prev, data.route]);
-        }
-      }
+    } catch (error) {
+      console.error('Favorite toggle error:', error);
+      showToast('오류가 발생했습니다', true);
     }
+  };
+
+  // 간단한 토스트 메시지 표시
+  const [toastMessage, setToastMessage] = useState<{ text: string; isError: boolean } | null>(null);
+
+  const showToast = (text: string, isError = false) => {
+    setToastMessage({ text, isError });
+    setTimeout(() => setToastMessage(null), 2000);
   };
 
   // 탭 전환 시 지도 오버레이 정리
@@ -995,6 +1050,18 @@ function BusPageContent() {
   return (
     <div className="relative h-[calc(100vh-3rem)] overflow-hidden">
       <div ref={mapRef} className="absolute inset-0 z-0" />
+
+      {/* Toast 메시지 */}
+      {toastMessage && (
+        <div className={cn(
+          "fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg shadow-lg text-sm font-medium transition-all",
+          toastMessage.isError
+            ? "bg-red-500 text-white"
+            : "bg-green-500 text-white"
+        )}>
+          {toastMessage.text}
+        </div>
+      )}
 
       <div className="hidden md:block absolute left-0 top-0 bottom-0 z-10">
         <BusSidebar>
