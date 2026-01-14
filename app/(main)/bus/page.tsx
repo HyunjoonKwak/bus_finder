@@ -30,6 +30,7 @@ type KakaoCustomOverlay = any;
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 interface BusPosition {
+  stationSeq: number;
   busStationSeq: number;
   plateNo: string;
   lowPlate?: boolean;
@@ -203,8 +204,10 @@ function BusPageContent() {
         dragendListenerRef.current = dragendHandler;
 
         // 줌 컨트롤 추가
-        const zoomControl = new kakao.maps.ZoomControl();
-        map.addControl(zoomControl, kakao.maps.ControlPosition.RIGHT);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const zoomControl = new (kakao.maps as any).ZoomControl();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (map as any).addControl(zoomControl, (kakao.maps as any).ControlPosition.RIGHT);
 
         setMapLoaded(true);
       } catch (err) {
@@ -383,7 +386,15 @@ function BusPageContent() {
       }
 
       const stations: BusStationInfo[] = data.stations || [];
-      const positions: BusPosition[] = data.realtime || [];
+      // API 응답의 busStationSeq를 stationSeq에도 매핑
+      const rawPositions = data.realtime || [];
+      const positions: BusPosition[] = rawPositions.map((p: { busStationSeq: number; plateNo: string; lowPlate?: boolean; crowded?: number; direction?: number }) => ({
+        ...p,
+        stationSeq: p.busStationSeq,
+      }));
+      console.log('[BusRoute] API Response - stations:', stations.length, 'realtime:', positions.length);
+      console.log('[BusRoute] Station idx values:', stations.slice(0, 5).map(s => ({ name: s.stationName, idx: s.idx })));
+      console.log('[BusRoute] Bus positions:', positions);
       setBusRouteStations(stations);
       setBusPositions(positions);
 
@@ -459,11 +470,12 @@ function BusPageContent() {
         }
 
         // 버스 위치 마커 표시
-        const midPoint = Math.ceil(stations.length / 2);
-        positions.forEach((pos) => {
-          const stationIdx = pos.busStationSeq - 1;
-          if (stationIdx >= 0 && stationIdx < stations.length) {
-            const station = stations[stationIdx];
+        console.log('[BusRoute] Displaying bus positions:', positions.length, 'buses');
+        positions.forEach((pos, posIdx) => {
+          // 정류소 순번(idx)으로 매칭 (배열 인덱스가 아닌 실제 순번)
+          const station = stations.find(s => s.idx === pos.busStationSeq);
+          console.log(`[BusRoute] Bus ${posIdx}: seq=${pos.busStationSeq}, found station:`, station?.stationName);
+          if (station) {
             const position = new kakao.maps.LatLng(parseFloat(station.y), parseFloat(station.x));
 
             // 방향 결정: direction 0=종점방향, 1=기점방향
