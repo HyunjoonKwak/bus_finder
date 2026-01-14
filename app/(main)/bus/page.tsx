@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { StationSearchInput } from '@/components/station/StationSearchInput';
 import { BusSearchInput } from '@/components/bus/BusSearchInput';
@@ -87,6 +87,7 @@ interface SearchHistoryItem {
 
 function BusPageContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<KakaoMap | null>(null);
   const markersRef = useRef<KakaoCustomOverlay[]>([]);
@@ -1001,16 +1002,24 @@ function BusPageContent() {
             {['station', 'route', 'search', 'tracking'].map((tab) => (
               <button
                 key={tab}
-                onClick={() => setActiveTab(tab as TabType)}
+                onClick={() => {
+                  if (tab === 'search') {
+                    router.push('/search');
+                  } else if (tab === 'tracking') {
+                    router.push('/tracking');
+                  } else {
+                    setActiveTab(tab as TabType);
+                  }
+                }}
                 className={cn(
                   "flex-1 py-2 text-sm font-medium rounded-lg transition-colors",
-                  activeTab === tab 
-                    ? "bg-primary text-primary-foreground" 
+                  activeTab === tab
+                    ? "bg-primary text-primary-foreground"
                     : "bg-muted text-muted-foreground hover:bg-accent"
                 )}
               >
-                {tab === 'station' ? '정류소' : 
-                 tab === 'route' ? '노선' : 
+                {tab === 'station' ? '정류소' :
+                 tab === 'route' ? '노선' :
                  tab === 'search' ? '길찾기' : '추적'}
               </button>
             ))}
@@ -1047,10 +1056,16 @@ function BusPageContent() {
         {/* Show bottom sheet when nothing is selected */}
         {!selectedStation && !selectedBus && (
           <MobileBottomSheet
-            mode={activeTab === 'route' ? 'bus' : activeTab === 'search' ? 'search' : activeTab === 'tracking' ? 'tracking' : 'station'}
+            mode={activeTab === 'route' ? 'bus' : 'station'}
             onModeChange={(mode) => {
-              const tabMap: Record<string, TabType> = { station: 'station', bus: 'route', search: 'search', tracking: 'tracking' };
-              setActiveTab(tabMap[mode] || 'station');
+              if (mode === 'search') {
+                router.push('/search');
+              } else if (mode === 'tracking') {
+                router.push('/tracking');
+              } else {
+                const tabMap: Record<string, TabType> = { station: 'station', bus: 'route' };
+                setActiveTab(tabMap[mode] || 'station');
+              }
             }}
             onSearchFocus={() => setMobileSearchOpen(true)}
             onCurrentLocation={() => {
@@ -1159,7 +1174,7 @@ function BusPageContent() {
         {/* Search overlay */}
         <MobileSearchOverlay
           isOpen={mobileSearchOpen}
-          mode={activeTab === 'route' ? 'bus' : activeTab === 'search' ? 'search' : activeTab === 'tracking' ? 'tracking' : 'station'}
+          mode={activeTab === 'route' ? 'bus' : 'station'}
           onClose={() => setMobileSearchOpen(false)}
           onSelectStation={handleSelectStation}
           onSelectBus={handleSelectBus}
