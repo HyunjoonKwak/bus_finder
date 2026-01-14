@@ -273,6 +273,10 @@ ghcr_build() {
     local username=$(echo "$GHCR_USERNAME" | tr '[:upper:]' '[:lower:]')
     local platforms="linux/amd64,linux/arm64"
 
+    # 버전 파일 생성 (git hash 포함)
+    log_info "버전 파일 생성 중..."
+    node "$APP_DIR/scripts/generate-version.js"
+
     log_info "GHCR 멀티플랫폼 이미지 빌드 중..."
     log_info "태그: $tag"
     log_info "플랫폼: $platforms"
