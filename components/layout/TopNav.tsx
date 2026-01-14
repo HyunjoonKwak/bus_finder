@@ -74,9 +74,10 @@ export function TopNav() {
                     ? 'text-primary bg-primary/10'
                     : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                 )}
+                title={item.label}
               >
                 <item.icon className="h-4 w-4" />
-                <span className="text-xs font-medium">{item.label}</span>
+                <span className="hidden sm:inline text-xs font-medium">{item.label}</span>
               </Link>
             );
           })}
@@ -138,12 +139,12 @@ function BusIcon({ className }: { className?: string }) {
       stroke="currentColor"
       viewBox="0 0 24 24"
     >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M8 7v8a2 2 0 002 2h4a2 2 0 002-2V7M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2M8 7h8m-8 0H6a2 2 0 00-2 2v6a2 2 0 002 2h2m8-10h2a2 2 0 012 2v6a2 2 0 01-2 2h-2m-4 3v2m-4-2v2"
-      />
+      {/* 버스 측면 모양 */}
+      <rect x="3" y="6" width="18" height="10" rx="2" strokeWidth={2} />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18" />
+      <circle cx="7" cy="16" r="1.5" strokeWidth={1.5} fill="currentColor" />
+      <circle cx="17" cy="16" r="1.5" strokeWidth={1.5} fill="currentColor" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 6V4M18 6V4" />
     </svg>
   );
 }
