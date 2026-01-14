@@ -31,7 +31,8 @@
       "Bash(./manage.sh:*)",
       "WebFetch(domain:github.com)",
       "Bash(npm run lint:*)",
-      "Bash(npm audit:*)"
+      "Bash(npm audit:*)",
+      "Bash(git rev-parse:*)"
     ]
   },
   "outputStyle": "default"
