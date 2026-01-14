@@ -33,7 +33,8 @@ ENV NEXT_PUBLIC_KAKAO_MAP_API_KEY=$NEXT_PUBLIC_KAKAO_MAP_API_KEY
 ENV NEXT_PUBLIC_PUBLICDATA_API_KEY=$NEXT_PUBLIC_PUBLICDATA_API_KEY
 ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN npm run build
+# version.ts는 manage.sh에서 미리 생성됨 (.git 폴더가 Docker에 없으므로)
+RUN npx next build
 
 # Stage 3: Runner
 FROM node:20-alpine AS runner
