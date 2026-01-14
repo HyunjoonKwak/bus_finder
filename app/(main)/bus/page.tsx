@@ -1021,6 +1021,29 @@ function BusPageContent() {
 
       {/* Mobile UI */}
       <div className="md:hidden">
+        {/* Floating radius control for station tab */}
+        {activeTab === 'station' && !selectedStation && !selectedBus && (
+          <div className="absolute top-16 left-3 z-10 flex items-center gap-1 bg-background/95 backdrop-blur rounded-lg shadow-lg p-1">
+            {[300, 500, 1000].map((radius) => (
+              <button
+                key={radius}
+                onClick={() => {
+                  setSearchRadius(radius);
+                  fetchNearbyStations(mapCenter || currentLocation || undefined, radius);
+                }}
+                className={cn(
+                  "px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors",
+                  searchRadius === radius
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-accent"
+                )}
+              >
+                {radius >= 1000 ? `${radius / 1000}km` : `${radius}m`}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Show bottom sheet when nothing is selected */}
         {!selectedStation && !selectedBus && (
           <MobileBottomSheet
@@ -1114,11 +1137,19 @@ function BusPageContent() {
           <MobileInfoCard
             type="bus"
             bus={selectedBus}
+            busStationsCount={busRouteStations.length}
+            busPositionsCount={busPositions.length}
+            loadingBusRoute={loadingBusRoute}
             isFavorite={favoriteRoutes.some(r => r.bus_id === selectedBus.busID)}
             onExpand={() => setMobileDetailOpen(true)}
             onClose={() => {
               setSelectedBus(null);
               setBusRouteStations([]);
+              setBusPositions([]);
+              busMarkersRef.current.forEach(m => m.setMap(null));
+              busMarkersRef.current = [];
+              stationMarkersRef.current.forEach(m => m.setMap(null));
+              stationMarkersRef.current = [];
               if (polylineRef.current) polylineRef.current.setMap(null);
             }}
             onToggleFavorite={() => handleFavoriteToggle('route', selectedBus)}

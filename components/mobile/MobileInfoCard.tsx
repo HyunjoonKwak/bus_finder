@@ -11,6 +11,10 @@ interface MobileInfoCardProps {
   bus?: BusLaneInfo | null;
   arrivals?: RealtimeArrivalInfo[];
   loadingArrivals?: boolean;
+  // Bus route info
+  busStationsCount?: number;
+  busPositionsCount?: number;
+  loadingBusRoute?: boolean;
   isFavorite?: boolean;
   onExpand: () => void;
   onClose: () => void;
@@ -25,6 +29,9 @@ export function MobileInfoCard({
   bus,
   arrivals = [],
   loadingArrivals,
+  busStationsCount = 0,
+  busPositionsCount = 0,
+  loadingBusRoute,
   isFavorite,
   onExpand,
   onClose,
@@ -173,6 +180,63 @@ export function MobileInfoCard({
                 <ChevronUp className="w-4 h-4" />
               </button>
             )}
+          </div>
+        )}
+
+        {/* Bus route info */}
+        {type === 'bus' && bus && (
+          <div className="px-4 pb-4 border-t border-border/50">
+            <div className="flex items-center justify-between pt-3 mb-2">
+              <span className="text-xs text-muted-foreground">노선 정보</span>
+              <span className={cn(
+                "px-1.5 py-0.5 rounded text-[10px] font-medium",
+                getBusTypeStyle(bus.type).bg,
+                getBusTypeStyle(bus.type).text
+              )}>
+                {getBusTypeStyle(bus.type).label}
+              </span>
+            </div>
+
+            {loadingBusRoute ? (
+              <div className="flex items-center justify-center py-3">
+                <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="bg-muted/50 rounded-lg p-2">
+                  <p className="text-[10px] text-muted-foreground">첫차</p>
+                  <p className="text-sm font-medium">{bus.busFirstTime || '--:--'}</p>
+                </div>
+                <div className="bg-muted/50 rounded-lg p-2">
+                  <p className="text-[10px] text-muted-foreground">막차</p>
+                  <p className="text-sm font-medium">{bus.busLastTime || '--:--'}</p>
+                </div>
+                <div className="bg-muted/50 rounded-lg p-2">
+                  <p className="text-[10px] text-muted-foreground">배차</p>
+                  <p className="text-sm font-medium">{bus.busInterval ? `${bus.busInterval}분` : '--'}</p>
+                </div>
+                <div className="bg-muted/50 rounded-lg p-2">
+                  <p className="text-[10px] text-muted-foreground">정류소</p>
+                  <p className="text-sm font-medium">{busStationsCount}개</p>
+                </div>
+                <div className="bg-muted/50 rounded-lg p-2">
+                  <p className="text-[10px] text-muted-foreground">운행중</p>
+                  <p className="text-sm font-medium text-primary">{busPositionsCount}대</p>
+                </div>
+                <div className="bg-muted/50 rounded-lg p-2">
+                  <p className="text-[10px] text-muted-foreground">노선ID</p>
+                  <p className="text-[10px] font-medium truncate">{bus.busID}</p>
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={onExpand}
+              className="w-full mt-3 py-2 flex items-center justify-center gap-1 text-sm text-primary"
+            >
+              <span>상세 정보 보기</span>
+              <ChevronUp className="w-4 h-4" />
+            </button>
           </div>
         )}
 
