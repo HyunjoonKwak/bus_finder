@@ -227,6 +227,29 @@ async function handleArrivalDetection(
 
     console.log(`[Cron] ${target.bus_no}: pending 상태에서 변경 감지 (이전: ${pendingData.arrival_sec}초, 현재: ${arrivalSec === null ? '정보없음' : arrivalSec + '초'})`);
 
+    // 중복 방지: 최근 3분 내 동일 버스/정류소 기록이 있는지 확인
+    const recentCutoff = new Date(now.getTime() - DUPLICATE_PREVENTION_TIME);
+    const { data: recentLogs } = await supabase
+      .from('bus_arrival_logs')
+      .select('id')
+      .eq('user_id', target.user_id)
+      .eq('bus_id', target.bus_id)
+      .eq('station_id', target.station_id)
+      .gte('arrival_time', recentCutoff.toISOString())
+      .limit(1);
+
+    if (recentLogs && recentLogs.length > 0) {
+      console.log(`[Cron] ${target.bus_no}: 3분 내 중복 기록 방지 - 스킵`);
+      // pending 삭제만 하고 기록은 안 함
+      await supabase
+        .from('pending_arrivals')
+        .delete()
+        .eq('user_id', target.user_id)
+        .eq('bus_id', target.bus_id)
+        .eq('station_id', target.station_id);
+      return false;
+    }
+
     // 도착 기록
     const dayOfWeek = now.getDay(); // 0=일, 1=월, ..., 6=토
     const { error: logError } = await supabase
