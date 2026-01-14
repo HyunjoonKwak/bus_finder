@@ -1,12 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Search, MapPin, Bus, ChevronUp, ChevronDown, RefreshCw, Clock, X } from 'lucide-react';
+import { Search, MapPin, Bus, ChevronUp, ChevronDown, RefreshCw, Clock, X, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import type { NearbyStation } from '@/components/station/NearbyStations';
 
-type SearchMode = 'station' | 'bus';
+type SearchMode = 'station' | 'bus' | 'favorites';
 type SheetState = 'collapsed' | 'half' | 'expanded';
 
 interface SearchHistoryItem {
@@ -19,6 +19,21 @@ interface SearchHistoryItem {
   arsID?: string;
   busType?: number;
   timestamp: number;
+}
+
+interface FavoriteStation {
+  id: string;
+  station_id: string;
+  station_name: string;
+  x?: string;
+  y?: string;
+}
+
+interface FavoriteRoute {
+  id: string;
+  bus_id: string;
+  bus_no: string;
+  bus_type?: number;
 }
 
 interface MobileBottomSheetProps {
@@ -38,6 +53,13 @@ interface MobileBottomSheetProps {
   onHistorySelect: (item: SearchHistoryItem) => void;
   onRemoveHistoryItem: (type: string, id: string) => void;
   onClearHistory: () => void;
+  // Favorites
+  favoriteStations?: FavoriteStation[];
+  favoriteRoutes?: FavoriteRoute[];
+  onFavoriteStationSelect?: (station: FavoriteStation) => void;
+  onFavoriteRouteSelect?: (route: FavoriteRoute) => void;
+  onRemoveFavoriteStation?: (stationId: string) => void;
+  onRemoveFavoriteRoute?: (busId: string) => void;
 }
 
 export function MobileBottomSheet({
@@ -55,6 +77,12 @@ export function MobileBottomSheet({
   onHistorySelect,
   onRemoveHistoryItem,
   onClearHistory,
+  favoriteStations = [],
+  favoriteRoutes = [],
+  onFavoriteStationSelect,
+  onFavoriteRouteSelect,
+  onRemoveFavoriteStation,
+  onRemoveFavoriteRoute,
 }: MobileBottomSheetProps) {
   const [sheetState, setSheetState] = useState<SheetState>('collapsed');
 
@@ -62,6 +90,7 @@ export function MobileBottomSheet({
     switch (mode) {
       case 'station': return '정류소 검색';
       case 'bus': return '버스 번호 검색';
+      case 'favorites': return '즐겨찾기';
     }
   };
 
@@ -105,6 +134,7 @@ export function MobileBottomSheet({
           {([
             { id: 'station', label: '정류소', icon: MapPin },
             { id: 'bus', label: '노선', icon: Bus },
+            { id: 'favorites', label: '즐겨찾기', icon: Star },
           ] as const).map(({ id, label, icon: Icon }) => (
             <button
               key={id}
@@ -140,23 +170,21 @@ export function MobileBottomSheet({
             <MapPin className="w-5 h-5 text-primary" />
           </button>
 
-          {(mode === 'station' || mode === 'bus') && (
-            <button
-              onClick={toggleSheet}
-              className="flex items-center justify-center w-12 h-12 bg-muted rounded-xl"
-              aria-label={sheetState === 'collapsed' ? '펼치기' : '접기'}
-            >
-              {sheetState === 'collapsed' ? (
-                <ChevronUp className="w-5 h-5 text-muted-foreground" />
-              ) : (
-                <ChevronDown className="w-5 h-5 text-muted-foreground" />
-              )}
-            </button>
-          )}
+          <button
+            onClick={toggleSheet}
+            className="flex items-center justify-center w-12 h-12 bg-muted rounded-xl"
+            aria-label={sheetState === 'collapsed' ? '펼치기' : '접기'}
+          >
+            {sheetState === 'collapsed' ? (
+              <ChevronUp className="w-5 h-5 text-muted-foreground" />
+            ) : (
+              <ChevronDown className="w-5 h-5 text-muted-foreground" />
+            )}
+          </button>
         </div>
 
         {/* Expanded content */}
-        {sheetState === 'half' && (mode === 'station' || mode === 'bus') && (
+        {sheetState === 'half' && (
           <div className="overflow-y-auto max-h-[calc(60vh-160px)] pb-2">
             {/* Station mode content */}
             {mode === 'station' && (
@@ -233,7 +261,7 @@ export function MobileBottomSheet({
             )}
 
             {/* History section - for both station and bus modes */}
-            {filteredHistory.length > 0 && (
+            {(mode === 'station' || mode === 'bus') && filteredHistory.length > 0 && (
               <div className="pt-2 border-t border-border">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
@@ -277,6 +305,85 @@ export function MobileBottomSheet({
                       </button>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {/* Favorites mode content */}
+            {mode === 'favorites' && (
+              <div className="space-y-4">
+                {/* Favorite stations */}
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <MapPin className="w-4 h-4 text-primary" />
+                    <span className="font-medium text-sm">정류소</span>
+                    <span className="text-xs text-muted-foreground">({favoriteStations.length})</span>
+                  </div>
+                  {favoriteStations.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      즐겨찾기한 정류소가 없습니다
+                    </p>
+                  ) : (
+                    <div className="space-y-1">
+                      {favoriteStations.map((station) => (
+                        <div
+                          key={station.id}
+                          className="flex items-center gap-2 p-2.5 rounded-lg hover:bg-accent/50"
+                        >
+                          <button
+                            onClick={() => onFavoriteStationSelect?.(station)}
+                            className="flex-1 flex items-center gap-2 text-left min-w-0"
+                          >
+                            <Star className="w-4 h-4 text-amber-500 flex-shrink-0" fill="currentColor" />
+                            <span className="text-sm truncate">{station.station_name}</span>
+                          </button>
+                          <button
+                            onClick={() => onRemoveFavoriteStation?.(station.station_id)}
+                            className="p-1.5 rounded hover:bg-accent flex-shrink-0"
+                          >
+                            <X className="w-3.5 h-3.5 text-muted-foreground" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Favorite routes */}
+                <div className="pt-3 border-t border-border">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Bus className="w-4 h-4 text-primary" />
+                    <span className="font-medium text-sm">노선</span>
+                    <span className="text-xs text-muted-foreground">({favoriteRoutes.length})</span>
+                  </div>
+                  {favoriteRoutes.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      즐겨찾기한 노선이 없습니다
+                    </p>
+                  ) : (
+                    <div className="space-y-1">
+                      {favoriteRoutes.map((route) => (
+                        <div
+                          key={route.id}
+                          className="flex items-center gap-2 p-2.5 rounded-lg hover:bg-accent/50"
+                        >
+                          <button
+                            onClick={() => onFavoriteRouteSelect?.(route)}
+                            className="flex-1 flex items-center gap-2 text-left min-w-0"
+                          >
+                            <Star className="w-4 h-4 text-amber-500 flex-shrink-0" fill="currentColor" />
+                            <span className="text-sm font-medium">{route.bus_no}</span>
+                          </button>
+                          <button
+                            onClick={() => onRemoveFavoriteRoute?.(route.bus_id)}
+                            className="p-1.5 rounded hover:bg-accent flex-shrink-0"
+                          >
+                            <X className="w-3.5 h-3.5 text-muted-foreground" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}

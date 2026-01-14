@@ -1,6 +1,6 @@
 /**
  * Next.js Instrumentation Hook
- * 서버 시작 시 node-cron 스케줄러를 실행합니다.
+ * 서버 시작 시 DB 설정에 따라 스케줄러를 시작합니다.
  *
  * 참고: next.config.ts에서 experimental.instrumentationHook: true 필요
  */
@@ -13,10 +13,11 @@ export async function register() {
 
     if (cronEnabled) {
       try {
-        const { startCronScheduler } = await import('./lib/cron/scheduler');
-        startCronScheduler();
+        // DB 설정에 따라 스케줄러 초기화
+        const { initSchedulerFromDB } = await import('./lib/cron/scheduler');
+        await initSchedulerFromDB();
       } catch (error) {
-        console.error('[Instrumentation] Failed to start cron scheduler:', error);
+        console.error('[Instrumentation] Failed to init scheduler from DB:', error);
       }
     } else {
       console.log('[Instrumentation] Cron scheduler disabled by ENABLE_CRON=false');

@@ -1,5 +1,6 @@
 import { createServiceClient } from '@/lib/supabase/service';
 import { getBusArrival } from '@/lib/publicdata/bus-arrival';
+import { timerManager } from './dynamic-timer';
 
 const ARRIVAL_IMMINENT_THRESHOLD = 180; // 3분 이내면 "곧 도착" 상태
 const DUPLICATE_PREVENTION_TIME = 3 * 60 * 1000; // 3분 내 중복 기록 방지
@@ -167,6 +168,100 @@ export async function collectArrivals(): Promise<{
     const errMsg = error instanceof Error ? error.message : String(error);
     errors.push(`Collection error: ${errMsg}`);
     return { checked, logged, errors };
+  }
+}
+
+/**
+ * 동적 타이머 방식: 전체 추적 대상 스캔 후 타이머 설정
+ * 메인 타이머(15분)에서 호출
+ */
+export async function scanAndSetupTimers(): Promise<{
+  checked: number;
+  timersSet: number;
+  errors: string[];
+}> {
+  const supabase = createServiceClient();
+  const errors: string[] = [];
+  let checked = 0;
+  let timersSet = 0;
+
+  try {
+    // 1. 모든 활성 추적 대상 조회 (next_check_at 무시)
+    const { data: targets, error: targetsError } = await supabase
+      .from('bus_tracking_targets')
+      .select('*')
+      .eq('is_active', true);
+
+    if (targetsError) {
+      errors.push(`Failed to fetch targets: ${targetsError.message}`);
+      return { checked, timersSet, errors };
+    }
+
+    if (!targets || targets.length === 0) {
+      console.log('[Scan] No active targets');
+      return { checked, timersSet, errors };
+    }
+
+    console.log(`[Scan] Scanning ${targets.length} active targets`);
+
+    // 2. 정류소별 그룹화 (API 호출 최소화)
+    const stationMap = new Map<string, TrackingTarget[]>();
+    for (const target of targets as TrackingTarget[]) {
+      const key = `${target.station_id}|${target.ars_id || ''}`;
+      const existing = stationMap.get(key) || [];
+      existing.push(target);
+      stationMap.set(key, existing);
+    }
+
+    // 3. 정류소별로 도착 정보 조회 및 타이머 설정
+    for (const [stationKey, stationTargets] of stationMap) {
+      try {
+        const [stationId, arsId] = stationKey.split('|');
+
+        // 도착 정보 조회 (공공데이터 API)
+        const arrivals = await getBusArrival(stationId, arsId || undefined);
+        checked += stationTargets.length;
+
+        for (const target of stationTargets) {
+          try {
+            // 버스 매칭
+            const busArrival = arrivals.find((a) => {
+              const aRouteId = String(a.routeId || '');
+              const aRouteName = String(a.routeName || '');
+              const tBusId = String(target.bus_id || '');
+              const tBusNo = String(target.bus_no || '');
+              return (
+                aRouteId === tBusId ||
+                aRouteName === tBusNo ||
+                aRouteName.replace(/\s/g, '') === tBusNo.replace(/\s/g, '')
+              );
+            });
+
+            const arrivalSec = busArrival?.predictTime1
+              ? busArrival.predictTime1 * 60
+              : null;
+
+            // 동적 타이머 설정
+            timerManager.setTimer(target, arrivalSec);
+            timersSet++;
+
+          } catch (targetError) {
+            const errMsg = targetError instanceof Error ? targetError.message : String(targetError);
+            errors.push(`Target ${target.bus_no}: ${errMsg}`);
+          }
+        }
+      } catch (stationError) {
+        const errMsg = stationError instanceof Error ? stationError.message : String(stationError);
+        errors.push(`Station ${stationKey}: ${errMsg}`);
+      }
+    }
+
+    console.log(`[Scan] Complete: ${checked} checked, ${timersSet} timers set`);
+    return { checked, timersSet, errors };
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    errors.push(`Scan error: ${errMsg}`);
+    return { checked, timersSet, errors };
   }
 }
 

@@ -73,6 +73,19 @@ export async function POST(request: NextRequest) {
         { status: 409 }
       );
     }
+    // 제한 초과 에러 처리
+    if (error.message?.includes('Maximum number of stations')) {
+      return NextResponse.json(
+        { error: '최대 정류소 수(10개)에 도달했습니다. 기존 정류소를 삭제해주세요.', code: 'STATION_LIMIT' },
+        { status: 400 }
+      );
+    }
+    if (error.message?.includes('Maximum number of tracking targets')) {
+      return NextResponse.json(
+        { error: '최대 추적 대상 수(20개)에 도달했습니다. 기존 대상을 삭제해주세요.', code: 'TARGET_LIMIT' },
+        { status: 400 }
+      );
+    }
     return ApiErrors.internalError('추적 대상 추가에 실패했습니다.', error.message);
   }
 
@@ -145,6 +158,19 @@ export async function PATCH(request: NextRequest) {
     .single();
 
   if (error) {
+    // 제한 초과 에러 처리
+    if (error.message?.includes('Maximum number of stations')) {
+      return NextResponse.json(
+        { error: '최대 정류소 수(10개)에 도달했습니다.', code: 'STATION_LIMIT' },
+        { status: 400 }
+      );
+    }
+    if (error.message?.includes('Maximum number of tracking targets')) {
+      return NextResponse.json(
+        { error: '최대 추적 대상 수(20개)에 도달했습니다.', code: 'TARGET_LIMIT' },
+        { status: 400 }
+      );
+    }
     return ApiErrors.internalError('추적 대상 업데이트에 실패했습니다.', error.message);
   }
 

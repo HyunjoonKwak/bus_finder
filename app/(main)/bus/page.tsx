@@ -38,7 +38,7 @@ interface BusPosition {
   direction?: number;
 }
 
-type TabType = 'station' | 'route' | 'search' | 'tracking';
+type TabType = 'station' | 'route' | 'search' | 'tracking' | 'favorites';
 
 interface FavoriteStation {
   id: string;
@@ -99,7 +99,7 @@ function BusPageContent() {
   const dragendListenerRef = useRef<(() => void) | null>(null);
 
   const tabParam = searchParams.get('tab') as TabType | null;
-  const initialTab = tabParam && ['station', 'route', 'search', 'tracking'].includes(tabParam) ? tabParam : 'station';
+  const initialTab = tabParam && ['station', 'route', 'search', 'tracking', 'favorites'].includes(tabParam) ? tabParam : 'station';
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
 
   const [_mapLoaded, setMapLoaded] = useState(false);
@@ -1044,6 +1044,110 @@ function BusPageContent() {
           </div>
         </div>
       )}
+
+      {/* 즐겨찾기 탭 */}
+      {activeTab === 'favorites' && (
+        <div className="space-y-4">
+          {/* 즐겨찾기 정류소 */}
+          <div>
+            <h3 className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-2">
+              <span>🚏</span> 정류소 ({favoriteStations.length})
+            </h3>
+            {favoriteStations.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                즐겨찾기한 정류소가 없습니다.
+              </p>
+            ) : (
+              <div className="space-y-1">
+                {favoriteStations.map((station) => (
+                  <div
+                    key={station.id}
+                    className="flex items-center gap-2 p-3 rounded-lg hover:bg-accent/50 group cursor-pointer"
+                    onClick={() => handleSelectStation({
+                      stationID: station.station_id,
+                      stationName: station.station_name,
+                      x: station.x || '',
+                      y: station.y || '',
+                      CID: 1,
+                    })}
+                  >
+                    <span className="text-amber-500">⭐</span>
+                    <span className="flex-1 text-sm font-medium truncate">{station.station_name}</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleFavoriteToggle('station', {
+                          stationID: station.station_id,
+                          stationName: station.station_name,
+                          x: station.x || '',
+                          y: station.y || '',
+                          CID: 1,
+                        });
+                      }}
+                      className="p-1 rounded hover:bg-accent opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="즐겨찾기 해제"
+                    >
+                      <span className="text-muted-foreground text-xs">✕</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 즐겨찾기 노선 */}
+          <div className="pt-4 border-t border-border">
+            <h3 className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-2">
+              <span>🚌</span> 노선 ({favoriteRoutes.length})
+            </h3>
+            {favoriteRoutes.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                즐겨찾기한 노선이 없습니다.
+              </p>
+            ) : (
+              <div className="space-y-1">
+                {favoriteRoutes.map((route) => (
+                  <div
+                    key={route.id}
+                    className="flex items-center gap-2 p-3 rounded-lg hover:bg-accent/50 group cursor-pointer"
+                    onClick={() => handleSelectBus({
+                      busID: route.bus_id,
+                      busNo: route.bus_no,
+                      type: route.bus_type ?? 0,
+                    } as BusLaneInfo)}
+                  >
+                    <span className="text-amber-500">⭐</span>
+                    <span className="flex-1 text-sm font-medium">{route.bus_no}</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleFavoriteToggle('route', {
+                          busID: route.bus_id,
+                          busNo: route.bus_no,
+                          type: route.bus_type ?? 0,
+                        } as BusLaneInfo);
+                      }}
+                      className="p-1 rounded hover:bg-accent opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="즐겨찾기 해제"
+                    >
+                      <span className="text-muted-foreground text-xs">✕</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 로그인 안내 */}
+          {!user && (
+            <div className="mt-4 p-4 bg-muted/50 rounded-lg text-center">
+              <p className="text-sm text-muted-foreground">
+                로그인하면 즐겨찾기를 사용할 수 있습니다.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 
@@ -1065,19 +1169,23 @@ function BusPageContent() {
 
       <div className="hidden md:block absolute left-0 top-0 bottom-0 z-10">
         <BusSidebar>
-          <div className="flex gap-2 mb-4">
-            {['station', 'route'].map((tab) => (
+          <div className="flex gap-1 mb-4">
+            {[
+              { key: 'station', label: '정류소' },
+              { key: 'route', label: '노선' },
+              { key: 'favorites', label: '즐겨찾기' },
+            ].map((tab) => (
               <button
-                key={tab}
-                onClick={() => setActiveTab(tab as TabType)}
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key as TabType)}
                 className={cn(
                   "flex-1 py-2 text-sm font-medium rounded-lg transition-colors",
-                  activeTab === tab
+                  activeTab === tab.key
                     ? "bg-primary text-primary-foreground"
                     : "bg-muted text-muted-foreground hover:bg-accent"
                 )}
               >
-                {tab === 'station' ? '정류소' : '노선'}
+                {tab.label}
               </button>
             ))}
           </div>
@@ -1113,9 +1221,9 @@ function BusPageContent() {
         {/* Show bottom sheet when nothing is selected */}
         {!selectedStation && !selectedBus && (
           <MobileBottomSheet
-            mode={activeTab === 'route' ? 'bus' : 'station'}
+            mode={activeTab === 'route' ? 'bus' : activeTab === 'favorites' ? 'favorites' : 'station'}
             onModeChange={(mode) => {
-              const tabMap: Record<string, TabType> = { station: 'station', bus: 'route' };
+              const tabMap: Record<string, TabType> = { station: 'station', bus: 'route', favorites: 'favorites' };
               setActiveTab(tabMap[mode] || 'station');
             }}
             onSearchFocus={() => setMobileSearchOpen(true)}
@@ -1176,6 +1284,46 @@ function BusPageContent() {
             onClearHistory={() => {
               setSearchHistory([]);
               localStorage.removeItem('bus_search_history');
+            }}
+            favoriteStations={favoriteStations}
+            favoriteRoutes={favoriteRoutes}
+            onFavoriteStationSelect={(station) => {
+              handleSelectStation({
+                stationID: station.station_id,
+                stationName: station.station_name,
+                x: station.x || '',
+                y: station.y || '',
+                CID: 1,
+              });
+            }}
+            onFavoriteRouteSelect={(route) => {
+              handleSelectBus({
+                busID: route.bus_id,
+                busNo: route.bus_no,
+                type: route.bus_type ?? 0,
+              } as BusLaneInfo);
+            }}
+            onRemoveFavoriteStation={(stationId) => {
+              const station = favoriteStations.find(s => s.station_id === stationId);
+              if (station) {
+                handleFavoriteToggle('station', {
+                  stationID: station.station_id,
+                  stationName: station.station_name,
+                  x: station.x || '',
+                  y: station.y || '',
+                  CID: 1,
+                });
+              }
+            }}
+            onRemoveFavoriteRoute={(busId) => {
+              const route = favoriteRoutes.find(r => r.bus_id === busId);
+              if (route) {
+                handleFavoriteToggle('route', {
+                  busID: route.bus_id,
+                  busNo: route.bus_no,
+                  type: route.bus_type ?? 0,
+                } as BusLaneInfo);
+              }
             }}
           />
         )}

@@ -79,7 +79,15 @@ const timeToMinutes = (time: string): number => {
   return hours * 60 + mins;
 };
 
-const REFRESH_INTERVAL = 30;
+const REFRESH_OPTIONS = [
+  { value: 30, label: '30초' },
+  { value: 60, label: '1분' },
+  { value: 120, label: '2분' },
+  { value: 300, label: '5분' },
+  { value: 0, label: '수동' },
+];
+
+const DEFAULT_REFRESH_INTERVAL = 30;
 
 export default function TrackingPage() {
   const router = useRouter();
@@ -87,7 +95,8 @@ export default function TrackingPage() {
   const [recommendations, setRecommendations] = useState<RecommendationData | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingRec, setLoadingRec] = useState(true);
-  const [countdown, setCountdown] = useState(REFRESH_INTERVAL);
+  const [refreshInterval, setRefreshInterval] = useState(DEFAULT_REFRESH_INTERVAL);
+  const [countdown, setCountdown] = useState(DEFAULT_REFRESH_INTERVAL);
   const [collecting, setCollecting] = useState(false);
   const [notificationEnabled, setNotificationEnabled] = useState(false);
   const [bufferMinutes, setBufferMinutes] = useState(5);
@@ -220,14 +229,22 @@ export default function TrackingPage() {
     setCollecting(false);
   }, []);
 
-  // localStorage에서 출퇴근 설정 로드
+  // localStorage에서 출퇴근 설정 및 리프레시 간격 로드
   useEffect(() => {
-    const saved = localStorage.getItem('commuteSettings');
-    if (saved) {
+    const savedCommute = localStorage.getItem('commuteSettings');
+    if (savedCommute) {
       try {
-        setCommuteSettings(JSON.parse(saved));
+        setCommuteSettings(JSON.parse(savedCommute));
       } catch {
         // ignore
+      }
+    }
+    const savedRefresh = localStorage.getItem('tracking_refresh_interval');
+    if (savedRefresh) {
+      const interval = parseInt(savedRefresh);
+      if (!isNaN(interval)) {
+        setRefreshInterval(interval);
+        setCountdown(interval || DEFAULT_REFRESH_INTERVAL);
       }
     }
   }, []);
@@ -263,11 +280,14 @@ export default function TrackingPage() {
 
     checkArrivals();
 
+    // 수동 모드(0)면 타이머 설정 안 함
+    if (refreshInterval === 0) return;
+
     intervalRef.current = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
           checkArrivals();
-          return REFRESH_INTERVAL;
+          return refreshInterval;
         }
         return prev - 1;
       });
@@ -278,7 +298,7 @@ export default function TrackingPage() {
         clearInterval(intervalRef.current);
       }
     };
-  }, [loading, targets.length, checkArrivals]);
+  }, [loading, targets.length, checkArrivals, refreshInterval]);
 
   const handleToggle = async (target: TrackingTarget) => {
     try {
@@ -352,6 +372,12 @@ export default function TrackingPage() {
 
   const handleCommuteSettingsChange = (updates: Partial<CommuteSettings>) => {
     setCommuteSettings(prev => ({ ...prev, ...updates }));
+  };
+
+  const handleRefreshIntervalChange = (interval: number) => {
+    setRefreshInterval(interval);
+    setCountdown(interval || DEFAULT_REFRESH_INTERVAL);
+    localStorage.setItem('tracking_refresh_interval', interval.toString());
   };
 
   const getCurrentTimeWindow = (): string => {
@@ -697,13 +723,27 @@ export default function TrackingPage() {
               </div>
             ) : (
               <>
-                <span>{countdown}초</span>
+                <select
+                  value={refreshInterval}
+                  onChange={(e) => handleRefreshIntervalChange(parseInt(e.target.value))}
+                  className="text-xs border rounded px-2 py-1 bg-background"
+                  title="새로고침 간격"
+                >
+                  {REFRESH_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                {refreshInterval > 0 && (
+                  <span className="text-xs">{countdown}초</span>
+                )}
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => {
                     checkArrivals();
-                    setCountdown(REFRESH_INTERVAL);
+                    setCountdown(refreshInterval || DEFAULT_REFRESH_INTERVAL);
                   }}
                 >
                   새로고침
