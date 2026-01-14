@@ -999,18 +999,10 @@ function BusPageContent() {
       <div className="hidden md:block absolute left-0 top-0 bottom-0 z-10">
         <BusSidebar>
           <div className="flex gap-2 mb-4">
-            {['station', 'route', 'search', 'tracking'].map((tab) => (
+            {['station', 'route'].map((tab) => (
               <button
                 key={tab}
-                onClick={() => {
-                  if (tab === 'search') {
-                    router.push('/search');
-                  } else if (tab === 'tracking') {
-                    router.push('/tracking');
-                  } else {
-                    setActiveTab(tab as TabType);
-                  }
-                }}
+                onClick={() => setActiveTab(tab as TabType)}
                 className={cn(
                   "flex-1 py-2 text-sm font-medium rounded-lg transition-colors",
                   activeTab === tab
@@ -1018,9 +1010,7 @@ function BusPageContent() {
                     : "bg-muted text-muted-foreground hover:bg-accent"
                 )}
               >
-                {tab === 'station' ? '정류소' :
-                 tab === 'route' ? '노선' :
-                 tab === 'search' ? '길찾기' : '추적'}
+                {tab === 'station' ? '정류소' : '노선'}
               </button>
             ))}
           </div>
@@ -1058,14 +1048,8 @@ function BusPageContent() {
           <MobileBottomSheet
             mode={activeTab === 'route' ? 'bus' : 'station'}
             onModeChange={(mode) => {
-              if (mode === 'search') {
-                router.push('/search');
-              } else if (mode === 'tracking') {
-                router.push('/tracking');
-              } else {
-                const tabMap: Record<string, TabType> = { station: 'station', bus: 'route' };
-                setActiveTab(tabMap[mode] || 'station');
-              }
+              const tabMap: Record<string, TabType> = { station: 'station', bus: 'route' };
+              setActiveTab(tabMap[mode] || 'station');
             }}
             onSearchFocus={() => setMobileSearchOpen(true)}
             onCurrentLocation={() => {

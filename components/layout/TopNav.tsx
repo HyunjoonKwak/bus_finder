@@ -11,6 +11,7 @@ import type { User } from '@supabase/supabase-js';
 const navItems = [
   { href: '/explore', label: '지도', icon: MapIcon },
   { href: '/bus', label: '버스', icon: BusIcon },
+  { href: '/search', label: '길찾기', icon: RouteIcon },
   { href: '/settings', label: '설정', icon: SettingsIcon },
 ];
 
@@ -142,6 +143,26 @@ function BusIcon({ className }: { className?: string }) {
         strokeWidth={2}
         d="M8 7v8a2 2 0 002 2h4a2 2 0 002-2V7M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2M8 7h8m-8 0H6a2 2 0 00-2 2v6a2 2 0 002 2h2m8-10h2a2 2 0 012 2v6a2 2 0 01-2 2h-2m-4 3v2m-4-2v2"
       />
+    </svg>
+  );
+}
+
+function RouteIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
+      />
+      <circle cx="7" cy="7" r="2" strokeWidth={2} />
+      <circle cx="17" cy="17" r="2" strokeWidth={2} />
     </svg>
   );
 }

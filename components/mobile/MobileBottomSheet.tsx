@@ -1,12 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Search, MapPin, Bus, Navigation, Bell, ChevronUp, ChevronDown, RefreshCw, Clock, X } from 'lucide-react';
+import { Search, MapPin, Bus, ChevronUp, ChevronDown, RefreshCw, Clock, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import type { NearbyStation } from '@/components/station/NearbyStations';
 
-type SearchMode = 'station' | 'bus' | 'search' | 'tracking';
+type SearchMode = 'station' | 'bus';
 type SheetState = 'collapsed' | 'half' | 'expanded';
 
 interface SearchHistoryItem {
@@ -62,8 +62,6 @@ export function MobileBottomSheet({
     switch (mode) {
       case 'station': return '정류소 검색';
       case 'bus': return '버스 번호 검색';
-      case 'search': return '목적지 검색';
-      case 'tracking': return '추적 중인 버스';
     }
   };
 
@@ -78,9 +76,7 @@ export function MobileBottomSheet({
 
   // Reset to collapsed when mode changes
   useEffect(() => {
-    if (mode === 'search' || mode === 'tracking') {
-      setSheetState('collapsed');
-    }
+    setSheetState('collapsed');
   }, [mode]);
 
   const sheetHeight = sheetState === 'collapsed'
@@ -109,8 +105,6 @@ export function MobileBottomSheet({
           {([
             { id: 'station', label: '정류소', icon: MapPin },
             { id: 'bus', label: '노선', icon: Bus },
-            { id: 'search', label: '길찾기', icon: Navigation },
-            { id: 'tracking', label: '추적', icon: Bell },
           ] as const).map(({ id, label, icon: Icon }) => (
             <button
               key={id}
