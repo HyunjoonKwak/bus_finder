@@ -358,6 +358,10 @@ show_help() {
     echo "  ghcr:login            - GHCR에 로그인"
     echo "  ghcr:push [tag]       - 멀티플랫폼 이미지 빌드 및 GHCR에 푸시"
     echo ""
+    echo -e "${BLUE}=== Cron (백그라운드 수집/알림) ===${NC}"
+    echo "  cron:run              - Cron 작업 실행 (도착 수집 + 막차 알림)"
+    echo "  cron:setup            - NAS Cron 설정 가이드"
+    echo ""
     echo -e "${YELLOW}환경 변수:${NC}"
     echo "  GHCR_USERNAME  - GitHub Username (기본: hyunjoonkwak)"
     echo "  IMAGE_TAG      - 이미지 태그 (기본: latest)"
@@ -371,6 +375,77 @@ show_help() {
     echo -e "${YELLOW}예시 (GHCR 배포):${NC}"
     echo "  $0 ghcr:push            # GHCR에 이미지 푸시 (latest)"
     echo "  $0 ghcr:push v1.0.0     # 특정 태그로 푸시"
+    echo ""
+}
+
+cron_run() {
+    local base_url="${CRON_BASE_URL:-http://localhost:3400}"
+    local cron_secret="${CRON_SECRET:-}"
+
+    log_info "Cron 작업 실행 중..."
+    log_info "URL: ${base_url}/api/cron/collect-arrivals"
+
+    local auth_header=""
+    if [ -n "$cron_secret" ]; then
+        auth_header="-H \"Authorization: Bearer ${cron_secret}\""
+    fi
+
+    local result=$(curl -s -w "\n%{http_code}" \
+        ${auth_header:+-H "Authorization: Bearer ${cron_secret}"} \
+        --max-time 60 \
+        "${base_url}/api/cron/collect-arrivals" 2>/dev/null)
+
+    local http_code=$(echo "$result" | tail -n1)
+    local body=$(echo "$result" | sed '$d')
+
+    if [ "$http_code" = "200" ]; then
+        log_success "Cron 실행 완료"
+        echo "$body" | jq . 2>/dev/null || echo "$body"
+    else
+        log_error "Cron 실행 실패 (HTTP $http_code)"
+        echo "$body"
+        exit 1
+    fi
+}
+
+cron_setup() {
+    log_info "Cron 설정 가이드"
+    echo ""
+    echo -e "${YELLOW}=== NAS에서 Cron 설정 방법 ===${NC}"
+    echo ""
+    echo "1. crontab 편집:"
+    echo "   crontab -e"
+    echo ""
+    echo "2. 다음 라인 추가 (5분마다 실행):"
+    echo "   */5 * * * * cd $APP_DIR && ./manage.sh cron:run >> /var/log/bus-finder-cron.log 2>&1"
+    echo ""
+    echo "3. 또는 systemd 타이머 사용:"
+    echo ""
+    echo "   /etc/systemd/system/bus-finder-cron.service:"
+    echo "   [Unit]"
+    echo "   Description=Bus Finder Cron Job"
+    echo "   "
+    echo "   [Service]"
+    echo "   Type=oneshot"
+    echo "   WorkingDirectory=$APP_DIR"
+    echo "   ExecStart=$APP_DIR/manage.sh cron:run"
+    echo ""
+    echo "   /etc/systemd/system/bus-finder-cron.timer:"
+    echo "   [Unit]"
+    echo "   Description=Bus Finder Cron Timer"
+    echo "   "
+    echo "   [Timer]"
+    echo "   OnBootSec=1min"
+    echo "   OnUnitActiveSec=5min"
+    echo "   "
+    echo "   [Install]"
+    echo "   WantedBy=timers.target"
+    echo ""
+    echo "   systemctl enable --now bus-finder-cron.timer"
+    echo ""
+    echo -e "${YELLOW}=== 환경 변수 ===${NC}"
+    echo "  CRON_BASE_URL  - 애플리케이션 URL (기본: http://localhost:3400)"
+    echo "  CRON_SECRET    - API 인증 키 (.env에서 설정)"
     echo ""
 }
 
@@ -416,6 +491,12 @@ case "$1" in
         ;;
     ghcr:push)
         ghcr_push "$2"
+        ;;
+    cron:run)
+        cron_run
+        ;;
+    cron:setup)
+        cron_setup
         ;;
     help|--help|-h)
         show_help

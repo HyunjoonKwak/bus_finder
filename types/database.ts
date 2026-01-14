@@ -213,6 +213,8 @@ export interface Database {
           webhook_type: string;
           webhook_url: string;
           is_enabled: boolean;
+          last_bus_time: string | null;
+          last_notified_at: string | null;
           created_at: string;
         };
         Insert: {
@@ -225,6 +227,8 @@ export interface Database {
           webhook_type: string;
           webhook_url: string;
           is_enabled?: boolean;
+          last_bus_time?: string | null;
+          last_notified_at?: string | null;
           created_at?: string;
         };
         Update: {
@@ -237,6 +241,8 @@ export interface Database {
           webhook_type?: string;
           webhook_url?: string;
           is_enabled?: boolean;
+          last_bus_time?: string | null;
+          last_notified_at?: string | null;
           created_at?: string;
         };
       };

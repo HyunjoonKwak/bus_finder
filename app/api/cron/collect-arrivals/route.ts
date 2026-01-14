@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { collectArrivals } from '@/lib/cron/collect-arrivals';
+import { checkLastBusAlerts } from '@/lib/cron/last-bus-alert';
 
 /**
  * Cron API 엔드포인트
@@ -26,15 +27,28 @@ export async function GET(request: NextRequest) {
 
   try {
     const startTime = Date.now();
-    const result = await collectArrivals();
+
+    // 1. 도착 정보 수집 및 자동 기록
+    const arrivalResult = await collectArrivals();
+
+    // 2. 막차 알림 체크 및 발송
+    const lastBusResult = await checkLastBusAlerts();
+
     const duration = Date.now() - startTime;
 
     return NextResponse.json({
       success: true,
       duration: `${duration}ms`,
-      checked: result.checked,
-      logged: result.logged,
-      errors: result.errors.length > 0 ? result.errors : undefined,
+      arrivals: {
+        checked: arrivalResult.checked,
+        logged: arrivalResult.logged,
+        errors: arrivalResult.errors.length > 0 ? arrivalResult.errors : undefined,
+      },
+      lastBusAlerts: {
+        checked: lastBusResult.checked,
+        sent: lastBusResult.sent,
+        errors: lastBusResult.errors.length > 0 ? lastBusResult.errors : undefined,
+      },
     });
   } catch (error) {
     console.error('[Cron API] Error:', error);
