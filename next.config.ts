@@ -1,11 +1,20 @@
 import type { NextConfig } from "next";
 import { execSync } from 'child_process';
+import { dirname } from 'path';
+import { fileURLToPath } from 'url';
 
-const getGitHash = () => {
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+const getGitHash = (): string => {
   try {
-    return execSync('git rev-parse --short HEAD').toString().trim();
+    const hash = execSync('git rev-parse --short HEAD', {
+      cwd: __dirname,
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'ignore'],
+    }).trim();
+    return hash || 'dev';
   } catch {
-    return 'unknown';
+    return 'dev';
   }
 };
 

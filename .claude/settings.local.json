@@ -32,7 +32,8 @@
       "WebFetch(domain:github.com)",
       "Bash(npm run lint:*)",
       "Bash(npm audit:*)",
-      "Bash(git rev-parse:*)"
+      "Bash(git rev-parse:*)",
+      "Bash(node:*)"
     ]
   },
   "outputStyle": "default"
