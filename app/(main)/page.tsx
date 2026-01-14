@@ -559,6 +559,12 @@ export default function HomePage() {
           </div>
         )}
       </div>
+
+      {/* Footer */}
+      <footer className="text-center text-xs text-muted-foreground py-4 mt-auto border-t border-border/50">
+        <p>2026.01. By Specialrisk.</p>
+        <p className="mt-1 opacity-60">v0.1.0</p>
+      </footer>
     </div>
   );
 }
