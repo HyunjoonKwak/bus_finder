@@ -17,6 +17,7 @@ interface SearchHistoryItem {
   x?: string;
   y?: string;
   arsID?: string;
+  busType?: number;
   timestamp: number;
 }
 

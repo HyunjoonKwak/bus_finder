@@ -81,6 +81,7 @@ interface SearchHistoryItem {
   x?: string;
   y?: string;
   arsID?: string;
+  busType?: number; // 버스 타입 (1: 일반, 11: 광역 등)
   timestamp: number;
 }
 
@@ -630,6 +631,7 @@ function BusPageContent() {
       id: bus.busID,
       name: bus.busNo,
       subInfo: bus.busStartPoint && bus.busEndPoint ? `${bus.busStartPoint} → ${bus.busEndPoint}` : undefined,
+      busType: bus.type,
     });
 
     fetchBusRoute(bus);
@@ -960,7 +962,7 @@ function BusPageContent() {
                   onClick={() => handleSelectBus({
                     busID: item.id,
                     busNo: item.name,
-                    type: 0,
+                    type: item.busType ?? 0,
                     busStartPoint: item.subInfo?.split(' → ')[0] || '',
                     busEndPoint: item.subInfo?.split(' → ')[1] || '',
                   } as BusLaneInfo)}
@@ -1069,7 +1071,7 @@ function BusPageContent() {
                 handleSelectBus({
                   busID: item.id,
                   busNo: item.name,
-                  type: 0,
+                  type: item.busType ?? 0,
                   busStartPoint: item.subInfo?.split(' → ')[0] || '',
                   busEndPoint: item.subInfo?.split(' → ')[1] || '',
                 } as BusLaneInfo);
