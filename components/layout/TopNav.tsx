@@ -157,18 +157,24 @@ function RouteIcon({ className }: { className?: string }) {
       stroke="currentColor"
       viewBox="0 0 24 24"
     >
-      {/* 네비게이션 화살표 */}
+      {/* 방향 표지판 */}
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
         strokeWidth={2}
-        d="M12 2l7 10-7 4-7-4 7-10z"
+        d="M12 3v18M12 3l-2 2M12 3l2 2"
       />
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
         strokeWidth={2}
-        d="M12 16v6"
+        d="M5 7h9l2 2-2 2H5V7z"
+      />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M19 14H10l-2 2 2 2h9v-4z"
       />
     </svg>
   );
