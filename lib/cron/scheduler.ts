@@ -1,57 +1,136 @@
-import cron from 'node-cron';
+import cron, { ScheduledTask } from 'node-cron';
 import { collectArrivals } from './collect-arrivals';
+import { checkLastBusAlerts } from './last-bus-alert';
 
-let isRunning = false;
-let isCollecting = false;
+interface SchedulerState {
+  isRunning: boolean;
+  task: ScheduledTask | null;
+  isCollecting: boolean;
+  lastRun: Date | null;
+  lastResult: {
+    arrivals: { checked: number; logged: number };
+    lastBusAlerts: { checked: number; sent: number };
+  } | null;
+  intervalMinutes: number;
+}
+
+// 싱글톤 상태
+const state: SchedulerState = {
+  isRunning: false,
+  task: null,
+  isCollecting: false,
+  lastRun: null,
+  lastResult: null,
+  intervalMinutes: 5,
+};
 
 /**
- * node-cron 스케줄러 시작
- * 1분마다 실행되며, next_check_at 체크는 collectArrivals 내부에서 수행
+ * Cron 작업 실행
  */
-export function startCronScheduler() {
-  if (isRunning) {
-    console.log('[Cron] Scheduler already running');
+async function runCronJob() {
+  if (state.isCollecting) {
+    console.log('[Scheduler] Previous job still running, skipping...');
     return;
   }
-  isRunning = true;
 
-  // 1분마다 실행 (* * * * *)
-  cron.schedule('* * * * *', async () => {
-    // 이전 수집이 진행 중이면 스킵 (중복 실행 방지)
-    if (isCollecting) {
-      console.log('[Cron] Previous collection still running, skipping...');
-      return;
-    }
+  state.isCollecting = true;
+  const startTime = Date.now();
 
-    isCollecting = true;
-    const startTime = Date.now();
+  try {
+    console.log('[Scheduler] Running cron job at', new Date().toISOString());
 
-    try {
-      console.log('[Cron] Running collection check...');
-      const result = await collectArrivals();
+    const arrivalResult = await collectArrivals();
+    const lastBusResult = await checkLastBusAlerts();
 
-      const duration = Date.now() - startTime;
-      console.log(
-        `[Cron] Done in ${duration}ms: ${result.checked} checked, ${result.logged} logged`
-      );
+    state.lastRun = new Date();
+    state.lastResult = {
+      arrivals: {
+        checked: arrivalResult.checked,
+        logged: arrivalResult.logged,
+      },
+      lastBusAlerts: {
+        checked: lastBusResult.checked,
+        sent: lastBusResult.sent,
+      },
+    };
 
-      if (result.errors.length > 0) {
-        console.error('[Cron] Errors:', result.errors);
-      }
-    } catch (error) {
-      console.error('[Cron] Scheduler error:', error);
-    } finally {
-      isCollecting = false;
-    }
-  });
-
-  console.log('[Cron] Scheduler started - running every minute');
+    const duration = Date.now() - startTime;
+    console.log(`[Scheduler] Done in ${duration}ms:`, state.lastResult);
+  } catch (error) {
+    console.error('[Scheduler] Cron job error:', error);
+  } finally {
+    state.isCollecting = false;
+  }
 }
 
 /**
- * 스케줄러 중지 (테스트/개발용)
+ * 스케줄러 시작
+ * @param intervalMinutes 실행 간격 (분)
  */
-export function stopCronScheduler() {
-  isRunning = false;
-  console.log('[Cron] Scheduler stopped');
+export function startScheduler(intervalMinutes = 5): boolean {
+  if (state.isRunning) {
+    console.log('[Scheduler] Already running');
+    return true;
+  }
+
+  const cronExpression = `*/${intervalMinutes} * * * *`;
+
+  if (!cron.validate(cronExpression)) {
+    console.error('[Scheduler] Invalid cron expression:', cronExpression);
+    return false;
+  }
+
+  state.task = cron.schedule(cronExpression, runCronJob, {
+    timezone: 'Asia/Seoul',
+  });
+
+  state.isRunning = true;
+  state.intervalMinutes = intervalMinutes;
+  console.log('[Scheduler] Started - running every', intervalMinutes, 'minutes');
+
+  // 시작 시 즉시 한 번 실행
+  runCronJob();
+
+  return true;
 }
+
+/**
+ * 스케줄러 중지
+ */
+export function stopScheduler(): boolean {
+  if (!state.isRunning || !state.task) {
+    console.log('[Scheduler] Not running');
+    return true;
+  }
+
+  state.task.stop();
+  state.task = null;
+  state.isRunning = false;
+  console.log('[Scheduler] Stopped');
+
+  return true;
+}
+
+/**
+ * 스케줄러 상태 조회
+ */
+export function getSchedulerStatus() {
+  return {
+    isRunning: state.isRunning,
+    intervalMinutes: state.intervalMinutes,
+    lastRun: state.lastRun?.toISOString() || null,
+    lastResult: state.lastResult,
+  };
+}
+
+/**
+ * 수동으로 Cron 작업 실행
+ */
+export async function runManually() {
+  await runCronJob();
+  return getSchedulerStatus();
+}
+
+// 레거시 호환
+export const startCronScheduler = () => startScheduler(1);
+export const stopCronScheduler = stopScheduler;
