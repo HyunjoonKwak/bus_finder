@@ -73,8 +73,8 @@ export function TopNav() {
                     : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                 )}
               >
-                <item.icon className="h-4 w-4 sm:h-4 sm:w-4" />
-                <span className="text-xs font-medium hidden md:inline">{item.label}</span>
+                <item.icon className="h-4 w-4" />
+                <span className="text-xs font-medium">{item.label}</span>
               </Link>
             );
           })}

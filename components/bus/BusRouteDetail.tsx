@@ -1,16 +1,17 @@
 'use client';
 
+import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import type { BusLaneInfo, BusStationInfo } from '@/lib/odsay/types';
-import { getBusTypeStyle, getCrowdedInfo } from '@/lib/bus-utils';
+import { getBusTypeStyle } from '@/lib/bus-utils';
 
 interface BusPosition {
-  stationId: string;
-  stationSeq: number;
+  busStationSeq: number;
   plateNo: string;
-  remainSeatCnt?: number;
-  congestion?: number;
+  lowPlate?: boolean;
+  crowded?: number;
+  direction?: number;
 }
 
 interface BusRouteDetailProps {
@@ -31,6 +32,7 @@ export function BusRouteDetail({
   onClose,
 }: BusRouteDetailProps) {
   const busStyle = getBusTypeStyle(bus.type);
+  const [showStations, setShowStations] = useState(false);
   
   // Type-based gradient colors (from original page.tsx)
   const gradientColors: Record<number, string> = {
@@ -133,7 +135,107 @@ export function BusRouteDetail({
           <InfoBox label="운행중" value={`${realtimePositions.length}대`} />
           <InfoBox label="노선ID" value={bus.busID} valueClass="text-[11px] font-medium truncate" />
         </div>
+
+        {/* 정류소 목록 토글 버튼 */}
+        {stations.length > 0 && (
+          <button
+            onClick={() => setShowStations(!showStations)}
+            className="w-full mt-3 py-2 text-sm bg-white/20 hover:bg-white/30 rounded-lg transition-colors flex items-center justify-center gap-2"
+          >
+            <span>{showStations ? '정류소 목록 접기' : '정류소 목록 보기'}</span>
+            <svg
+              className={cn("w-4 h-4 transition-transform", showStations && "rotate-180")}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        )}
       </div>
+
+      {/* 정류소 목록 */}
+      {showStations && stations.length > 0 && (
+        <div className="mt-3 max-h-80 overflow-y-auto bg-white/10 backdrop-blur rounded-lg">
+          {stations.map((station, idx) => {
+            const busAtStation = realtimePositions.filter(p => p.busStationSeq === (station.idx || idx + 1));
+            const isFirst = idx === 0;
+            const isLast = idx === stations.length - 1;
+
+            return (
+              <div
+                key={station.stationID}
+                className={cn(
+                  "px-3 py-2 border-b border-white/10 last:border-b-0",
+                  busAtStation.length > 0 && "bg-white/15"
+                )}
+              >
+                <div className="flex items-center gap-3">
+                  {/* 순번/버스 아이콘 */}
+                  <div className="flex-shrink-0 w-8 text-center">
+                    {busAtStation.length > 0 ? (
+                      <span className="text-lg">🚌</span>
+                    ) : (
+                      <span className={cn(
+                        "text-xs font-medium",
+                        isFirst && "text-green-300",
+                        isLast && "text-red-300",
+                        !isFirst && !isLast && "text-white/60"
+                      )}>
+                        {station.idx || idx + 1}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* 정류소명 */}
+                  <div className="flex-1 min-w-0">
+                    <p className={cn(
+                      "text-sm truncate",
+                      isFirst && "text-green-300 font-medium",
+                      isLast && "text-red-300 font-medium"
+                    )}>
+                      {isFirst && '🚏 '}{isLast && '🏁 '}
+                      {station.stationName}
+                    </p>
+                    {station.arsID && (
+                      <p className="text-xs text-white/50">{station.arsID}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* 버스 정보 */}
+                {busAtStation.length > 0 && (
+                  <div className="ml-11 mt-1 space-y-1">
+                    {busAtStation.map((bus, busIdx) => {
+                      const isOutbound = bus.direction === 0;
+                      const isInbound = bus.direction === 1;
+                      return (
+                        <div
+                          key={busIdx}
+                          className={cn(
+                            "inline-flex items-center gap-2 px-2 py-1 rounded text-xs",
+                            isOutbound && "bg-blue-500/30",
+                            isInbound && "bg-orange-500/30",
+                            !isOutbound && !isInbound && "bg-gray-500/30"
+                          )}
+                        >
+                          <span className="font-medium">
+                            {bus.plateNo || '차량번호 없음'}
+                          </span>
+                          {bus.lowPlate && <span>🦽</span>}
+                          {isOutbound && <span className="text-blue-300">▶종점</span>}
+                          {isInbound && <span className="text-orange-300">◀기점</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

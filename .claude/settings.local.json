@@ -33,7 +33,8 @@
       "Bash(npm run lint:*)",
       "Bash(npm audit:*)",
       "Bash(git rev-parse:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Skill(commit)"
     ]
   },
   "outputStyle": "default"

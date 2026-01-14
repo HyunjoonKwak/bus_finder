@@ -13,7 +13,7 @@ import { BusSidebar } from '@/components/bus/BusSidebar';
 import { BusRouteDetail } from '@/components/bus/BusRouteDetail';
 import { StationArrivals } from '@/components/station/StationArrivals';
 import { NearbyStations, NearbyStation } from '@/components/station/NearbyStations';
-import { MobileSearchBar } from '@/components/mobile/MobileSearchBar';
+import { MobileBottomSheet } from '@/components/mobile/MobileBottomSheet';
 import { MobileSearchOverlay } from '@/components/mobile/MobileSearchOverlay';
 import { MobileInfoCard } from '@/components/mobile/MobileInfoCard';
 import { MobileDetailPanel } from '@/components/mobile/MobileDetailPanel';
@@ -30,11 +30,11 @@ type KakaoCustomOverlay = any;
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 interface BusPosition {
-  stationId: string;
-  stationSeq: number;
+  busStationSeq: number;
   plateNo: string;
-  remainSeatCnt?: number;
-  congestion?: number;
+  lowPlate?: boolean;
+  crowded?: number;
+  direction?: number;
 }
 
 type TabType = 'station' | 'route' | 'search' | 'tracking';
@@ -88,6 +88,8 @@ function BusPageContent() {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<KakaoMap | null>(null);
   const markersRef = useRef<KakaoCustomOverlay[]>([]);
+  const busMarkersRef = useRef<KakaoCustomOverlay[]>([]);
+  const stationMarkersRef = useRef<KakaoCustomOverlay[]>([]);
   const polylineRef = useRef<KakaoPolyline | null>(null);
   const radiusCircleRef = useRef<KakaoCircle | null>(null);
   const centerMarkerRef = useRef<KakaoCustomOverlay | null>(null);
@@ -199,6 +201,10 @@ function BusPageContent() {
         };
         kakao.maps.event.addListener(map, 'dragend', dragendHandler);
         dragendListenerRef.current = dragendHandler;
+
+        // 줌 컨트롤 추가
+        const zoomControl = new kakao.maps.ZoomControl();
+        map.addControl(zoomControl, kakao.maps.ControlPosition.RIGHT);
 
         setMapLoaded(true);
       } catch (err) {
@@ -359,21 +365,41 @@ function BusPageContent() {
     try {
       const response = await fetch(`/api/bus/route?routeId=${bus.busID}&busNo=${encodeURIComponent(bus.busNo)}`);
       const data = await response.json();
-      
+
       if (data.routeInfo) {
-        setSelectedBus(prev => prev ? ({ ...prev, ...data.routeInfo }) : data.routeInfo);
+        // API 응답 필드명을 BusLaneInfo 필드명으로 매핑
+        const routeInfo = data.routeInfo;
+        setSelectedBus(prev => ({
+          ...prev,
+          ...bus,
+          busStartPoint: routeInfo.startStation || bus.busStartPoint,
+          busEndPoint: routeInfo.endStation || bus.busEndPoint,
+          busFirstTime: routeInfo.firstTime || bus.busFirstTime,
+          busLastTime: routeInfo.lastTime || bus.busLastTime,
+          busInterval: routeInfo.interval || bus.busInterval,
+        }));
+      } else {
+        setSelectedBus(bus);
       }
-      
-      setBusRouteStations(data.stations || []);
-      setBusPositions(data.realtime || []);
-      
-      if (mapInstanceRef.current && data.stations?.length > 0) {
+
+      const stations: BusStationInfo[] = data.stations || [];
+      const positions: BusPosition[] = data.realtime || [];
+      setBusRouteStations(stations);
+      setBusPositions(positions);
+
+      if (mapInstanceRef.current && stations.length > 0) {
         const kakao = window.kakao;
         const map = mapInstanceRef.current;
-        const path = data.stations.map((s: BusStationInfo) => new kakao.maps.LatLng(parseFloat(s.y), parseFloat(s.x)));
 
+        // 기존 마커 정리
+        busMarkersRef.current.forEach((m) => m.setMap(null));
+        busMarkersRef.current = [];
+        stationMarkersRef.current.forEach((m) => m.setMap(null));
+        stationMarkersRef.current = [];
         if (polylineRef.current) polylineRef.current.setMap(null);
 
+        // 노선 폴리라인 그리기
+        const path = stations.map((s: BusStationInfo) => new kakao.maps.LatLng(parseFloat(s.y), parseFloat(s.x)));
         const polyline = new kakao.maps.Polyline({
           path,
           strokeWeight: 5,
@@ -383,6 +409,143 @@ function BusPageContent() {
         });
         polyline.setMap(map);
         polylineRef.current = polyline;
+
+        // 정류소 마커 표시 (기점/종점)
+        const firstStation = stations[0];
+        const lastStation = stations[stations.length - 1];
+
+        if (firstStation) {
+          const firstContent = document.createElement('div');
+          firstContent.innerHTML = `
+            <div style="
+              padding: 6px 10px;
+              background: #10B981;
+              border-radius: 16px;
+              box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+              white-space: nowrap;
+            ">
+              <span style="color: white; font-size: 12px; font-weight: 600;">🚏 ${firstStation.stationName}</span>
+            </div>
+          `;
+          const firstOverlay = new kakao.maps.CustomOverlay({
+            position: new kakao.maps.LatLng(parseFloat(firstStation.y), parseFloat(firstStation.x)),
+            content: firstContent,
+            yAnchor: 1.5,
+          });
+          firstOverlay.setMap(map);
+          stationMarkersRef.current.push(firstOverlay);
+        }
+
+        if (lastStation) {
+          const lastContent = document.createElement('div');
+          lastContent.innerHTML = `
+            <div style="
+              padding: 6px 10px;
+              background: #EF4444;
+              border-radius: 16px;
+              box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+              white-space: nowrap;
+            ">
+              <span style="color: white; font-size: 12px; font-weight: 600;">🏁 ${lastStation.stationName}</span>
+            </div>
+          `;
+          const lastOverlay = new kakao.maps.CustomOverlay({
+            position: new kakao.maps.LatLng(parseFloat(lastStation.y), parseFloat(lastStation.x)),
+            content: lastContent,
+            yAnchor: 1.5,
+          });
+          lastOverlay.setMap(map);
+          stationMarkersRef.current.push(lastOverlay);
+        }
+
+        // 버스 위치 마커 표시
+        const midPoint = Math.ceil(stations.length / 2);
+        positions.forEach((pos) => {
+          const stationIdx = pos.busStationSeq - 1;
+          if (stationIdx >= 0 && stationIdx < stations.length) {
+            const station = stations[stationIdx];
+            const position = new kakao.maps.LatLng(parseFloat(station.y), parseFloat(station.x));
+
+            // 방향 결정: direction 0=종점방향, 1=기점방향
+            const hasDirection = pos.direction !== undefined && pos.direction !== null;
+            const isOutbound = pos.direction === 0;
+            const isInbound = pos.direction === 1;
+
+            let directionLabel = '';
+            let directionColor = '#6B7280';
+
+            if (hasDirection) {
+              if (isOutbound) {
+                directionLabel = '▶ 종점방향';
+                directionColor = '#3B82F6';
+              } else if (isInbound) {
+                directionLabel = '◀ 기점방향';
+                directionColor = '#F97316';
+              }
+            }
+
+            const gradientEnd = isOutbound ? '#1D4ED8' : isInbound ? '#EA580C' : '#4B5563';
+            const shadowColor = isOutbound ? 'rgba(59,130,246,0.5)' : isInbound ? 'rgba(249,115,22,0.5)' : 'rgba(107,114,128,0.5)';
+            const bgColor = isOutbound ? 'rgba(59,130,246,0.9)' : isInbound ? 'rgba(249,115,22,0.9)' : 'rgba(107,114,128,0.9)';
+
+            const busContent = document.createElement('div');
+            busContent.innerHTML = `
+              <div style="
+                position: relative;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+              ">
+                <div style="
+                  width: 36px;
+                  height: 36px;
+                  background: linear-gradient(135deg, ${directionColor} 0%, ${gradientEnd} 100%);
+                  border: 3px solid white;
+                  border-radius: 50%;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  box-shadow: 0 4px 12px ${shadowColor};
+                ">
+                  <span style="font-size: 16px;">🚌</span>
+                </div>
+                ${directionLabel ? `
+                <div style="
+                  margin-top: 4px;
+                  padding: 2px 6px;
+                  background: ${bgColor};
+                  border-radius: 4px;
+                  white-space: nowrap;
+                ">
+                  <span style="color: white; font-size: 10px; font-weight: 500;">
+                    ${directionLabel}
+                  </span>
+                </div>
+                ` : ''}
+                <div style="
+                  margin-top: ${directionLabel ? '2px' : '4px'};
+                  padding: 2px 6px;
+                  background: rgba(0,0,0,0.75);
+                  border-radius: 4px;
+                  white-space: nowrap;
+                ">
+                  <span style="color: white; font-size: 10px; font-weight: 500;">
+                    ${pos.plateNo || '운행중'}${pos.lowPlate ? ' 🦽' : ''}
+                  </span>
+                </div>
+              </div>
+            `;
+
+            const busOverlay = new kakao.maps.CustomOverlay({
+              position,
+              content: busContent,
+              yAnchor: 1.4,
+              zIndex: 100,
+            });
+            busOverlay.setMap(map);
+            busMarkersRef.current.push(busOverlay);
+          }
+        });
 
         const bounds = new kakao.maps.LatLngBounds();
         path.forEach((p: KakaoLatLng) => bounds.extend(p));
@@ -566,6 +729,35 @@ function BusPageContent() {
     }
   };
 
+  // 탭 전환 시 지도 오버레이 정리
+  useEffect(() => {
+    if (activeTab !== 'station') {
+      // 정류소 탭이 아닐 때 주변 정류소 마커와 반경 원 숨기기
+      markersRef.current.forEach((m) => m.setMap(null));
+      markersRef.current = [];
+      if (radiusCircleRef.current) {
+        radiusCircleRef.current.setMap(null);
+        radiusCircleRef.current = null;
+      }
+      if (centerMarkerRef.current) {
+        centerMarkerRef.current.setMap(null);
+        centerMarkerRef.current = null;
+      }
+      setNearbyStations([]);
+    }
+    if (activeTab !== 'route') {
+      // 노선 탭이 아닐 때 노선 관련 오버레이 숨기기
+      if (polylineRef.current) {
+        polylineRef.current.setMap(null);
+        polylineRef.current = null;
+      }
+      busMarkersRef.current.forEach((m) => m.setMap(null));
+      busMarkersRef.current = [];
+      stationMarkersRef.current.forEach((m) => m.setMap(null));
+      stationMarkersRef.current = [];
+    }
+  }, [activeTab]);
+
   useEffect(() => {
     if (activeTab === 'station' && mapCenter && !selectedStation) {
       if (isInitialLoadRef.current || userMovedMap) {
@@ -667,15 +859,120 @@ function BusPageContent() {
       )}
 
       {!selectedStation && activeTab === 'station' && (
-        <NearbyStations
-          stations={nearbyStations}
-          loading={loadingNearby}
-          searchRadius={searchRadius}
-          hasMapCenter={!!mapCenter}
-          onStationClick={handleSelectStation}
-          onRadiusChange={setSearchRadius}
-          onRefresh={() => fetchNearbyStations()}
-        />
+        <>
+          <NearbyStations
+            stations={nearbyStations}
+            loading={loadingNearby}
+            searchRadius={searchRadius}
+            hasMapCenter={!!mapCenter}
+            onStationClick={handleSelectStation}
+            onRadiusChange={setSearchRadius}
+            onRefresh={() => fetchNearbyStations()}
+          />
+          {/* 최근 검색 - 정류소 */}
+          {searchHistory.filter(h => h.type === 'station').length > 0 && (
+            <div className="mt-4 pt-4 border-t border-border">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-muted-foreground">최근 검색</span>
+                <button
+                  onClick={() => {
+                    const newHistory = searchHistory.filter(h => h.type !== 'station');
+                    setSearchHistory(newHistory);
+                    localStorage.setItem('bus_search_history', JSON.stringify(newHistory));
+                  }}
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                >
+                  전체 삭제
+                </button>
+              </div>
+              <div className="space-y-1">
+                {searchHistory.filter(h => h.type === 'station').slice(0, 5).map((item) => (
+                  <div
+                    key={`${item.type}-${item.id}`}
+                    className="flex items-center gap-2 p-2 rounded-lg hover:bg-accent/50 group"
+                  >
+                    <button
+                      onClick={() => handleSelectStation({
+                        stationID: item.id,
+                        stationName: item.name,
+                        x: item.x || '',
+                        y: item.y || '',
+                        CID: 1,
+                        arsID: item.arsID,
+                      })}
+                      className="flex-1 text-left text-sm truncate"
+                    >
+                      {item.name}
+                    </button>
+                    <button
+                      onClick={() => {
+                        const newHistory = searchHistory.filter(h => !(h.type === item.type && h.id === item.id));
+                        setSearchHistory(newHistory);
+                        localStorage.setItem('bus_search_history', JSON.stringify(newHistory));
+                      }}
+                      className="p-1 rounded hover:bg-accent opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <span className="text-muted-foreground text-xs">✕</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* 최근 검색 - 노선 (버스 미선택 시) */}
+      {!selectedBus && activeTab === 'route' && searchHistory.filter(h => h.type === 'bus').length > 0 && (
+        <div className="mt-4 pt-4 border-t border-border">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-muted-foreground">최근 검색</span>
+            <button
+              onClick={() => {
+                const newHistory = searchHistory.filter(h => h.type !== 'bus');
+                setSearchHistory(newHistory);
+                localStorage.setItem('bus_search_history', JSON.stringify(newHistory));
+              }}
+              className="text-xs text-muted-foreground hover:text-foreground"
+            >
+              전체 삭제
+            </button>
+          </div>
+          <div className="space-y-1">
+            {searchHistory.filter(h => h.type === 'bus').slice(0, 10).map((item) => (
+              <div
+                key={`${item.type}-${item.id}`}
+                className="flex items-center gap-2 p-2 rounded-lg hover:bg-accent/50 group"
+              >
+                <button
+                  onClick={() => handleSelectBus({
+                    busID: item.id,
+                    busNo: item.name,
+                    type: 0,
+                    busStartPoint: item.subInfo?.split(' → ')[0] || '',
+                    busEndPoint: item.subInfo?.split(' → ')[1] || '',
+                  } as BusLaneInfo)}
+                  className="flex-1 text-left min-w-0"
+                >
+                  <span className="text-sm font-medium">{item.name}</span>
+                  {item.subInfo && (
+                    <p className="text-xs text-muted-foreground truncate">{item.subInfo}</p>
+                  )}
+                </button>
+                <button
+                  onClick={() => {
+                    const newHistory = searchHistory.filter(h => !(h.type === item.type && h.id === item.id));
+                    setSearchHistory(newHistory);
+                    localStorage.setItem('bus_search_history', JSON.stringify(newHistory));
+                  }}
+                  className="p-1 rounded hover:bg-accent opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <span className="text-muted-foreground text-xs">✕</span>
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );
@@ -710,9 +1007,9 @@ function BusPageContent() {
 
       {/* Mobile UI */}
       <div className="md:hidden">
-        {/* Show search bar when nothing is selected */}
+        {/* Show bottom sheet when nothing is selected */}
         {!selectedStation && !selectedBus && (
-          <MobileSearchBar
+          <MobileBottomSheet
             mode={activeTab === 'route' ? 'bus' : activeTab === 'search' ? 'search' : activeTab === 'tracking' ? 'tracking' : 'station'}
             onModeChange={(mode) => {
               const tabMap: Record<string, TabType> = { station: 'station', bus: 'route', search: 'search', tracking: 'tracking' };
@@ -726,6 +1023,56 @@ function BusPageContent() {
                 setMapCenter(currentLocation);
                 fetchNearbyStations(currentLocation);
               }
+            }}
+            nearbyStations={nearbyStations}
+            loadingNearby={loadingNearby}
+            searchRadius={searchRadius}
+            onRadiusChange={(radius) => {
+              setSearchRadius(radius);
+              fetchNearbyStations(mapCenter || currentLocation || undefined, radius);
+            }}
+            onRefreshNearby={() => fetchNearbyStations()}
+            onStationSelect={(station) => {
+              handleSelectStation({
+                stationID: station.stationID,
+                stationName: station.stationName,
+                x: station.x,
+                y: station.y,
+                CID: 1,
+                arsID: station.arsID,
+              });
+            }}
+            searchHistory={searchHistory}
+            onHistorySelect={(item) => {
+              if (item.type === 'station') {
+                handleSelectStation({
+                  stationID: item.id,
+                  stationName: item.name,
+                  x: item.x || '',
+                  y: item.y || '',
+                  CID: 1,
+                  arsID: item.arsID,
+                });
+              } else {
+                handleSelectBus({
+                  busID: item.id,
+                  busNo: item.name,
+                  type: 0,
+                  busStartPoint: item.subInfo?.split(' → ')[0] || '',
+                  busEndPoint: item.subInfo?.split(' → ')[1] || '',
+                } as BusLaneInfo);
+              }
+            }}
+            onRemoveHistoryItem={(type, id) => {
+              setSearchHistory(prev => {
+                const newHistory = prev.filter(h => !(h.type === type && h.id === id));
+                localStorage.setItem('bus_search_history', JSON.stringify(newHistory));
+                return newHistory;
+              });
+            }}
+            onClearHistory={() => {
+              setSearchHistory([]);
+              localStorage.removeItem('bus_search_history');
             }}
           />
         )}
