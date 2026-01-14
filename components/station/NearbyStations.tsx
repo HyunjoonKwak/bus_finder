@@ -85,7 +85,7 @@ export function NearbyStations({
         <div className="space-y-1">
           {stations.map((station, idx) => (
             <button
-              key={station.stationID}
+              key={`${station.stationID}_${idx}`}
               onClick={() => onStationClick(station)}
               className="w-full p-3 text-left rounded-lg border border-border hover:bg-accent/50 transition-colors bg-white/50 dark:bg-black/20 backdrop-blur-sm"
             >
