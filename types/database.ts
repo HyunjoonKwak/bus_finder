@@ -283,7 +283,9 @@ export interface Database {
           bus_no: string;
           station_id: string;
           station_name: string;
+          ars_id: string | null;
           is_active: boolean;
+          next_check_at: string | null;
           created_at: string;
         };
         Insert: {
@@ -293,7 +295,9 @@ export interface Database {
           bus_no: string;
           station_id: string;
           station_name: string;
+          ars_id?: string | null;
           is_active?: boolean;
+          next_check_at?: string | null;
           created_at?: string;
         };
         Update: {
@@ -303,8 +307,68 @@ export interface Database {
           bus_no?: string;
           station_id?: string;
           station_name?: string;
+          ars_id?: string | null;
           is_active?: boolean;
+          next_check_at?: string | null;
           created_at?: string;
+        };
+      };
+      pending_arrivals: {
+        Row: {
+          id: string;
+          user_id: string;
+          bus_id: string;
+          bus_no: string;
+          station_id: string;
+          station_name: string;
+          ars_id: string | null;
+          arrival_sec: number;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          bus_id: string;
+          bus_no: string;
+          station_id: string;
+          station_name: string;
+          ars_id?: string | null;
+          arrival_sec: number;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          bus_id?: string;
+          bus_no?: string;
+          station_id?: string;
+          station_name?: string;
+          ars_id?: string | null;
+          arrival_sec?: number;
+          updated_at?: string;
+        };
+      };
+      user_settings: {
+        Row: {
+          user_id: string;
+          bg_collection_enabled: boolean;
+          bg_collection_interval: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          bg_collection_enabled?: boolean;
+          bg_collection_interval?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          bg_collection_enabled?: boolean;
+          bg_collection_interval?: number;
+          created_at?: string;
+          updated_at?: string;
         };
       };
     };

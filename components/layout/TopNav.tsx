@@ -12,6 +12,7 @@ const navItems = [
   { href: '/explore', label: '지도', icon: MapIcon },
   { href: '/bus', label: '버스', icon: BusIcon },
   { href: '/search', label: '길찾기', icon: RouteIcon },
+  { href: '/tracking', label: '추적', icon: TrackingIcon },
   { href: '/settings', label: '설정', icon: SettingsIcon },
 ];
 
@@ -186,6 +187,30 @@ function SettingsIcon({ className }: { className?: string }) {
         strokeLinejoin="round"
         strokeWidth={2}
         d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+      />
+    </svg>
+  );
+}
+
+function TrackingIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+      />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
       />
     </svg>
   );
