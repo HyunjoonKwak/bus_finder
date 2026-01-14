@@ -15,7 +15,7 @@ interface MobileDetailPanelProps {
   bus?: BusLaneInfo | null;
   arrivals?: RealtimeArrivalInfo[];
   busStations?: BusStationInfo[];
-  busPositions?: { stationSeq: number; busStationSeq?: number; sectionOrder?: number; plateNo?: string; lowPlate?: boolean; crowded?: number }[];
+  busPositions?: { stationSeq: number; busStationSeq?: number; sectionOrder?: number; plateNo?: string; lowPlate?: boolean; crowded?: number; direction?: number }[];
   loadingArrivals?: boolean;
   loadingBusRoute?: boolean;
   countdown?: number;
@@ -206,6 +206,54 @@ export function MobileDetailPanel({
                   </p>
                 )}
 
+                {/* Bus info summary */}
+                {bus && (
+                  <div className="grid grid-cols-3 gap-2 mb-4">
+                    <div className="bg-muted/50 rounded-lg p-2 text-center">
+                      <p className="text-[10px] text-muted-foreground">첫차</p>
+                      <p className="text-sm font-medium">{bus.busFirstTime || '--:--'}</p>
+                    </div>
+                    <div className="bg-muted/50 rounded-lg p-2 text-center">
+                      <p className="text-[10px] text-muted-foreground">막차</p>
+                      <p className="text-sm font-medium">{bus.busLastTime || '--:--'}</p>
+                    </div>
+                    <div className="bg-muted/50 rounded-lg p-2 text-center">
+                      <p className="text-[10px] text-muted-foreground">배차</p>
+                      <p className="text-sm font-medium">{bus.busInterval ? `${bus.busInterval}분` : '--'}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Running buses info */}
+                {busPositions.length > 0 && (
+                  <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
+                    <p className="text-xs text-muted-foreground mb-2">운행중인 버스 ({busPositions.length}대)</p>
+                    <div className="flex flex-wrap gap-2">
+                      {busPositions.map((pos, idx) => {
+                        const isOutbound = pos.direction === 0;
+                        const isInbound = pos.direction === 1;
+                        return (
+                          <div
+                            key={idx}
+                            className={cn(
+                              "inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs",
+                              isOutbound && "bg-blue-100 dark:bg-blue-800/50 text-blue-800 dark:text-blue-200",
+                              isInbound && "bg-orange-100 dark:bg-orange-800/50 text-orange-800 dark:text-orange-200",
+                              !isOutbound && !isInbound && "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+                            )}
+                          >
+                            <span>🚌</span>
+                            <span className="font-medium">{pos.plateNo || `버스${idx + 1}`}</span>
+                            {pos.lowPlate && <span>🦽</span>}
+                            {isOutbound && <span className="text-blue-600 dark:text-blue-300">▶종점</span>}
+                            {isInbound && <span className="text-orange-600 dark:text-orange-300">◀기점</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {loadingBusRoute ? (
                   <div className="flex justify-center py-12">
                     <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -217,44 +265,80 @@ export function MobileDetailPanel({
 
                     <div className="space-y-1">
                       {busStations.map((s, idx) => {
-                        const busAtStation = busPositions.find(
-                          (p) => p.busStationSeq === s.idx || p.sectionOrder === idx + 1
+                        const busesAtStation = busPositions.filter(
+                          (p) => p.busStationSeq === s.idx || p.stationSeq === s.idx
                         );
+                        const isFirst = idx === 0;
+                        const isLast = idx === busStations.length - 1;
 
                         return (
-                          <button
-                            key={s.stationID || idx}
-                            onClick={() => onStationClick?.(s)}
-                            className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-accent/50 text-left relative"
-                          >
-                            {/* Station dot */}
-                            <div className={cn(
-                              "w-3 h-3 rounded-full border-2 z-10",
-                              idx === 0 || idx === busStations.length - 1
-                                ? "bg-primary border-primary"
-                                : "bg-background border-primary"
-                            )} />
+                          <div key={s.stationID || idx}>
+                            <button
+                              onClick={() => onStationClick?.(s)}
+                              className={cn(
+                                "w-full flex items-center gap-3 p-2 rounded-lg hover:bg-accent/50 text-left relative",
+                                busesAtStation.length > 0 && "bg-blue-50 dark:bg-blue-900/20"
+                              )}
+                            >
+                              {/* Station dot or bus icon */}
+                              <div className="w-5 flex-shrink-0 flex justify-center z-10">
+                                {busesAtStation.length > 0 ? (
+                                  <span className="text-base">🚌</span>
+                                ) : (
+                                  <div className={cn(
+                                    "w-3 h-3 rounded-full border-2",
+                                    isFirst ? "bg-green-500 border-green-500" :
+                                    isLast ? "bg-red-500 border-red-500" :
+                                    "bg-background border-primary"
+                                  )} />
+                                )}
+                              </div>
 
-                            {/* Bus indicator */}
-                            {busAtStation && (
-                              <div className="absolute left-2 -translate-x-1/2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center z-20">
-                                <span className="text-white text-xs">🚌</span>
+                              <div className="flex-1 min-w-0">
+                                <p className={cn(
+                                  "text-sm truncate",
+                                  isFirst && "text-green-600 dark:text-green-400 font-semibold",
+                                  isLast && "text-red-600 dark:text-red-400 font-semibold"
+                                )}>
+                                  {isFirst && '🚏 '}{isLast && '🏁 '}
+                                  {s.stationName}
+                                </p>
+                                {s.arsID && (
+                                  <p className="text-xs text-muted-foreground">{s.arsID}</p>
+                                )}
+                              </div>
+
+                              <span className="text-xs text-muted-foreground flex-shrink-0">
+                                {s.idx || idx + 1}
+                              </span>
+                            </button>
+
+                            {/* Bus info at station */}
+                            {busesAtStation.length > 0 && (
+                              <div className="ml-8 mb-2 flex flex-wrap gap-1.5">
+                                {busesAtStation.map((bus, busIdx) => {
+                                  const isOutbound = bus.direction === 0;
+                                  const isInbound = bus.direction === 1;
+                                  return (
+                                    <div
+                                      key={busIdx}
+                                      className={cn(
+                                        "inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs",
+                                        isOutbound && "bg-blue-100 dark:bg-blue-800/50 text-blue-800 dark:text-blue-200",
+                                        isInbound && "bg-orange-100 dark:bg-orange-800/50 text-orange-800 dark:text-orange-200",
+                                        !isOutbound && !isInbound && "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+                                      )}
+                                    >
+                                      <span className="font-medium">{bus.plateNo || '운행중'}</span>
+                                      {bus.lowPlate && <span>🦽</span>}
+                                      {isOutbound && <span>▶종점</span>}
+                                      {isInbound && <span>◀기점</span>}
+                                    </div>
+                                  );
+                                })}
                               </div>
                             )}
-
-                            <div className="flex-1 min-w-0">
-                              <p className={cn(
-                                "text-sm truncate",
-                                (idx === 0 || idx === busStations.length - 1) && "font-semibold"
-                              )}>
-                                {s.stationName}
-                              </p>
-                            </div>
-
-                            <span className="text-xs text-muted-foreground flex-shrink-0">
-                              {idx + 1}
-                            </span>
-                          </button>
+                          </div>
                         );
                       })}
                     </div>
