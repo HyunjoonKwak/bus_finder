@@ -157,14 +157,15 @@ function RouteIcon({ className }: { className?: string }) {
       stroke="currentColor"
       viewBox="0 0 24 24"
     >
+      {/* A→B 경로 아이콘 */}
+      <circle cx="5" cy="5" r="2.5" strokeWidth={2} />
+      <circle cx="19" cy="19" r="2.5" strokeWidth={2} />
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
         strokeWidth={2}
-        d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
+        d="M7.5 7.5L12 12m0 0l4.5 4.5M12 12l4.5-4.5M12 12L7.5 16.5"
       />
-      <circle cx="7" cy="7" r="2" strokeWidth={2} />
-      <circle cx="17" cy="17" r="2" strokeWidth={2} />
     </svg>
   );
 }
