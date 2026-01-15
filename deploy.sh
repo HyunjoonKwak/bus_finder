@@ -130,12 +130,29 @@ status() {
 logs() {
     local service=$1
 
+    # UTC -> KST 변환 (9시간 추가) - awk 사용
+    convert_to_kst() {
+        awk '{
+            if (match($0, /[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}/)) {
+                ts = substr($0, RSTART, RLENGTH)
+                gsub(/T/, " ", ts)
+                cmd = "date -d \"" ts " UTC\" +\"%Y-%m-%d %H:%M:%S\" 2>/dev/null"
+                cmd | getline kst
+                close(cmd)
+                if (kst != "") {
+                    sub(/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]+Z/, kst)
+                }
+            }
+            print
+        }'
+    }
+
     if [ -z "$service" ]; then
-        print_header "📝 전체 로그"
-        GHCR_USERNAME=${GHCR_USERNAME} IMAGE_TAG=${IMAGE_TAG} docker-compose -f ${COMPOSE_FILE} logs -tf --tail=100
+        print_header "📝 전체 로그 (KST)"
+        GHCR_USERNAME=${GHCR_USERNAME} IMAGE_TAG=${IMAGE_TAG} docker-compose -f ${COMPOSE_FILE} logs -tf --tail=100 | convert_to_kst
     else
-        print_header "📝 $service 로그"
-        GHCR_USERNAME=${GHCR_USERNAME} IMAGE_TAG=${IMAGE_TAG} docker-compose -f ${COMPOSE_FILE} logs -tf --tail=100 "$service"
+        print_header "📝 $service 로그 (KST)"
+        GHCR_USERNAME=${GHCR_USERNAME} IMAGE_TAG=${IMAGE_TAG} docker-compose -f ${COMPOSE_FILE} logs -tf --tail=100 "$service" | convert_to_kst
     fi
 }
 
