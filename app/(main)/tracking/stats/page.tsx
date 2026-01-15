@@ -22,6 +22,7 @@ interface ArrivalLog {
   id: string;
   arrival_time: string;
   day_of_week: number;
+  plate_no?: string | null;
 }
 
 interface Stats {
@@ -317,13 +318,20 @@ function StatsContent() {
                         })}
                       </span>
                     </div>
-                    <span className="font-semibold text-primary">
-                      {date.toLocaleTimeString('ko-KR', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        hour12: false,
-                      })}
-                    </span>
+                    <div className="text-right">
+                      <span className="font-semibold text-primary">
+                        {date.toLocaleTimeString('ko-KR', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          hour12: false,
+                        })}
+                      </span>
+                      {log.plate_no && (
+                        <span className="ml-2 text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                          {log.plate_no}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 );
               })}

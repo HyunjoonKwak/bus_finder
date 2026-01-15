@@ -10,6 +10,7 @@ interface ArrivalLog {
   station_name: string;
   arrival_time: string;
   day_of_week: number;
+  plate_no?: string | null;
 }
 
 interface DayStats {

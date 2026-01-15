@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
     return ApiErrors.badRequest('잘못된 요청 형식입니다.');
   }
 
-  const { bus_id, bus_no, station_id, station_name, arrival_time } = body;
+  const { bus_id, bus_no, station_id, station_name, arrival_time, plate_no } = body;
 
   if (!bus_id || !bus_no || !station_id || !station_name) {
     return ApiErrors.badRequest('버스 ID, 노선번호, 정류소 ID, 정류소명이 필요합니다.');
@@ -84,6 +84,7 @@ export async function POST(request: NextRequest) {
       station_name,
       arrival_time: arrivalDate.toISOString(),
       day_of_week: dayOfWeek,
+      plate_no: plate_no || null,
     })
     .select()
     .single();

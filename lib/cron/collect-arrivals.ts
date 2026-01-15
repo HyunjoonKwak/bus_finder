@@ -121,6 +121,7 @@ export async function collectArrivals(): Promise<{
             const arrivalSec = busArrival?.predictTime1
               ? busArrival.predictTime1 * 60
               : null;
+            const plateNo = busArrival?.plateNo1 || null;
 
             // 4. 다음 수집 시간 계산 및 업데이트
             const nextCheckAt = calculateNextCheckTime(arrivalSec);
@@ -134,7 +135,8 @@ export async function collectArrivals(): Promise<{
               supabase,
               target,
               arrivalSec,
-              now
+              now,
+              plateNo
             );
             if (logResult) logged++;
 
@@ -272,7 +274,8 @@ async function handleArrivalDetection(
   supabase: ReturnType<typeof createServiceClient>,
   target: TrackingTarget,
   arrivalSec: number | null,
-  now: Date
+  now: Date,
+  plateNo: string | null
 ): Promise<boolean> {
   const logKey = {
     user_id: target.user_id,
@@ -300,13 +303,14 @@ async function handleArrivalDetection(
         station_name: target.station_name,
         ars_id: target.ars_id,
         arrival_sec: arrivalSec,
+        plate_no: plateNo,
         updated_at: now.toISOString(),
       }, {
         onConflict: 'user_id,bus_id,station_id',
       });
 
     if (!pending) {
-      console.log(`[Cron] ${target.bus_no}: 곧 도착 상태 시작 (${arrivalSec}초)`);
+      console.log(`[Cron] ${target.bus_no}: 곧 도착 상태 시작 (${arrivalSec}초) [${plateNo || '번호없음'}]`);
     }
     return false;
   }
@@ -347,6 +351,7 @@ async function handleArrivalDetection(
 
     // 도착 기록
     const dayOfWeek = now.getDay(); // 0=일, 1=월, ..., 6=토
+    const pendingPlateNo = (pendingData as PendingArrival & { plate_no?: string }).plate_no || null;
     const { error: logError } = await supabase
       .from('bus_arrival_logs')
       .insert({
@@ -357,6 +362,7 @@ async function handleArrivalDetection(
         station_name: target.station_name,
         arrival_time: now.toISOString(),
         day_of_week: dayOfWeek,
+        plate_no: pendingPlateNo,
       });
 
     if (logError) {

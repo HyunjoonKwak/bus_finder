@@ -24,6 +24,7 @@ interface TimerState {
   nextCheckAt: Date;
   phase: 'waiting' | 'approaching' | 'imminent';
   lastArrivalSec: number | null;
+  lastPlateNo: string | null; // 마지막으로 감지한 차량번호
 }
 
 /**
@@ -38,7 +39,7 @@ class DynamicTimerManager {
   /**
    * 타이머 설정
    */
-  setTimer(target: TrackingTarget, arrivalSec: number | null): void {
+  setTimer(target: TrackingTarget, arrivalSec: number | null, plateNo?: string | null): void {
     const existingTimer = this.timers.get(target.id);
 
     // 기존 타이머 해제
@@ -55,6 +56,7 @@ class DynamicTimerManager {
         nextCheckAt: new Date(Date.now() + 15 * 60 * 1000), // 메인 타이머에서 복구
         phase: 'waiting',
         lastArrivalSec: null,
+        lastPlateNo: existingTimer?.lastPlateNo || null,
       });
       console.log(`[Timer] ${target.bus_no}@${target.station_name}: 도착 정보 없음, 메인 타이머 대기`);
       return;
@@ -75,13 +77,15 @@ class DynamicTimerManager {
       nextCheckAt,
       phase,
       lastArrivalSec: arrivalSec,
+      lastPlateNo: plateNo || existingTimer?.lastPlateNo || null,
     });
 
     const minutes = Math.floor(arrivalSec / 60);
     const delayMinutes = Math.floor(delayMs / 60000);
+    const plateInfo = plateNo ? ` [${plateNo}]` : '';
     console.log(
       `[Timer] ${target.bus_no}@${target.station_name}: ` +
-      `${minutes}분 후 도착, ${delayMinutes}분 후 체크 (${phase})`
+      `${minutes}분 후 도착${plateInfo}, ${delayMinutes}분 후 체크 (${phase})`
     );
   }
 
@@ -133,7 +137,7 @@ class DynamicTimerManager {
       return;
     }
 
-    const { target, lastArrivalSec } = state;
+    const { target, lastArrivalSec, lastPlateNo } = state;
     console.log(`[Timer] ${target.bus_no}@${target.station_name}: 타이머 발동`);
 
     try {
@@ -156,9 +160,10 @@ class DynamicTimerManager {
       const arrivalSec = busArrival?.predictTime1
         ? busArrival.predictTime1 * 60
         : null;
+      const plateNo = busArrival?.plateNo1 || null;
 
       // 도착 감지 로직
-      await this.handleArrivalDetection(target, arrivalSec, lastArrivalSec);
+      await this.handleArrivalDetection(target, arrivalSec, lastArrivalSec, plateNo, lastPlateNo);
 
     } catch (error) {
       console.error(`[Timer] ${target.bus_no}@${target.station_name}: 에러`, error);
@@ -173,17 +178,18 @@ class DynamicTimerManager {
   private async handleArrivalDetection(
     target: TrackingTarget,
     arrivalSec: number | null,
-    lastArrivalSec: number | null
+    lastArrivalSec: number | null,
+    plateNo: string | null,
+    lastPlateNo: string | null
   ): Promise<void> {
-    const supabase = createServiceClient();
     const now = new Date();
 
     // Case 1: 도착 정보 없음 → 버스가 도착했거나 정보 오류
     if (arrivalSec === null) {
       // 이전에 3분 이내였으면 도착으로 판정
       if (lastArrivalSec !== null && lastArrivalSec <= IMMINENT_THRESHOLD) {
-        await this.logArrival(target, now);
-        console.log(`[Timer] ${target.bus_no}@${target.station_name}: 도착 감지 (정보 없음)`);
+        await this.logArrival(target, now, lastPlateNo);
+        console.log(`[Timer] ${target.bus_no}@${target.station_name}: 도착 감지 (정보 없음) [${lastPlateNo || '번호없음'}]`);
       } else {
         console.log(`[Timer] ${target.bus_no}@${target.station_name}: 정보 없음, 대기`);
       }
@@ -194,25 +200,25 @@ class DynamicTimerManager {
 
     // Case 2: 곧 도착 상태 (3분 이내)
     if (arrivalSec <= IMMINENT_THRESHOLD) {
-      console.log(`[Timer] ${target.bus_no}@${target.station_name}: 곧 도착 (${arrivalSec}초)`);
-      this.setTimer(target, arrivalSec);
+      console.log(`[Timer] ${target.bus_no}@${target.station_name}: 곧 도착 (${arrivalSec}초) [${plateNo || '번호없음'}]`);
+      this.setTimer(target, arrivalSec, plateNo);
       return;
     }
 
-    // Case 3: 이전에 3분 이내였는데 이제 3분 초과 → 도착 완료
+    // Case 3: 이전에 3분 이내였는데 이제 3분 초과 → 도착 완료 (다음 버스 감지)
     if (lastArrivalSec !== null && lastArrivalSec <= IMMINENT_THRESHOLD) {
-      await this.logArrival(target, now);
-      console.log(`[Timer] ${target.bus_no}@${target.station_name}: 도착 감지 (다음 버스 감지)`);
+      await this.logArrival(target, now, lastPlateNo);
+      console.log(`[Timer] ${target.bus_no}@${target.station_name}: 도착 감지 (다음 버스 감지) [${lastPlateNo || '번호없음'}]`);
     }
 
     // 다음 체크 타이머 설정
-    this.setTimer(target, arrivalSec);
+    this.setTimer(target, arrivalSec, plateNo);
   }
 
   /**
    * 도착 기록 저장
    */
-  private async logArrival(target: TrackingTarget, now: Date): Promise<boolean> {
+  private async logArrival(target: TrackingTarget, now: Date, plateNo: string | null): Promise<boolean> {
     const supabase = createServiceClient();
 
     // 중복 방지: 최근 3분 내 동일 버스/정류소 기록 확인
@@ -243,6 +249,7 @@ class DynamicTimerManager {
         station_name: target.station_name,
         arrival_time: now.toISOString(),
         day_of_week: dayOfWeek,
+        plate_no: plateNo || null,
       });
 
     if (error) {
@@ -250,7 +257,7 @@ class DynamicTimerManager {
       return false;
     }
 
-    console.log(`[Timer] 도착 기록 저장: ${target.bus_no}@${target.station_name}`);
+    console.log(`[Timer] 도착 기록 저장: ${target.bus_no}@${target.station_name} [${plateNo || '번호없음'}]`);
     return true;
   }
 
