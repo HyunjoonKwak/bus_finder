@@ -232,7 +232,7 @@ export default function HomePage() {
 
       {/* Footer */}
       <footer className="flex-shrink-0 text-center text-[10px] text-muted-foreground/70 py-2 border-t border-border/50 bg-background">
-        <span>v{VERSION} ({GIT_HASH})</span>
+        <span>v{VERSION} ({GIT_HASH}) · By specialrisk 2026.</span>
       </footer>
     </div>
   );

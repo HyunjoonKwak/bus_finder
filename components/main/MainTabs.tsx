@@ -23,6 +23,17 @@ interface FavoriteRoute {
   bus_no: string;
 }
 
+interface RouteHistoryItem {
+  id: string;
+  origin_name: string;
+  origin_x: string;
+  origin_y: string;
+  dest_name: string;
+  dest_x: string;
+  dest_y: string;
+  created_at: string;
+}
+
 interface ApiMyPlace {
   id: string;
   name: string;
@@ -48,6 +59,7 @@ export function MainTabs({ className }: MainTabsProps) {
   const [favoriteStations, setFavoriteStations] = useState<FavoriteStation[]>([]);
   const [favoriteRoutes, setFavoriteRoutes] = useState<FavoriteRoute[]>([]);
   const [myPlaces, setMyPlaces] = useState<MyPlace[]>([]);
+  const [routeHistory, setRouteHistory] = useState<RouteHistoryItem[]>([]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -63,20 +75,23 @@ export function MainTabs({ className }: MainTabsProps) {
 
   const fetchData = async () => {
     try {
-      const [favStationsRes, favRoutesRes, myPlacesRes] = await Promise.all([
+      const [favStationsRes, favRoutesRes, myPlacesRes, routeHistoryRes] = await Promise.all([
         fetch('/api/favorites/stations'),
         fetch('/api/favorites/routes'),
         fetch('/api/my-places'),
+        fetch('/api/route-history'),
       ]);
 
-      const [favStationsData, favRoutesData, myPlacesData] = await Promise.all([
+      const [favStationsData, favRoutesData, myPlacesData, routeHistoryData] = await Promise.all([
         favStationsRes.json(),
         favRoutesRes.json(),
         myPlacesRes.json(),
+        routeHistoryRes.json(),
       ]);
 
       setFavoriteStations(favStationsData.stations || []);
       setFavoriteRoutes(favRoutesData.routes || []);
+      setRouteHistory(routeHistoryData.history || []);
 
       // API 응답을 프론트엔드 타입으로 변환
       const places = (myPlacesData.places || []).map((p: ApiMyPlace) => ({
@@ -262,28 +277,44 @@ export function MainTabs({ className }: MainTabsProps) {
             {/* 정류소 탭 */}
             {activeTab === 'station' && (
               <div className="space-y-3">
-                <Link href="/nearby">
-                  <Card className="p-3 border-border/50 hover:bg-accent/50 transition-colors">
-                    <div className="flex items-center gap-3">
-                      <span className="text-xl">📍</span>
-                      <div>
-                        <p className="text-sm font-medium">주변 정류소</p>
-                        <p className="text-xs text-muted-foreground">현재 위치 기준 가까운 정류소</p>
-                      </div>
-                    </div>
-                  </Card>
-                </Link>
                 <Link href="/bus">
                   <Card className="p-3 border-border/50 hover:bg-accent/50 transition-colors">
                     <div className="flex items-center gap-3">
-                      <span className="text-xl">🔍</span>
+                      <span className="text-xl">🚏</span>
                       <div>
-                        <p className="text-sm font-medium">정류소 검색</p>
-                        <p className="text-xs text-muted-foreground">정류소명으로 검색</p>
+                        <p className="text-sm font-medium">정류소 검색 · 주변 정류소</p>
+                        <p className="text-xs text-muted-foreground">정류소 검색 및 주변 정류소 찾기</p>
                       </div>
                     </div>
                   </Card>
                 </Link>
+
+                {/* 즐겨찾기 정류소 */}
+                {user && favoriteStations.length > 0 && (
+                  <div>
+                    <h3 className="text-xs font-medium text-muted-foreground mb-2">즐겨찾기 정류소</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      {favoriteStations.map((station) => (
+                        <Card
+                          key={station.id}
+                          className="p-2.5 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer"
+                          onClick={() => router.push(`/station/${station.station_id}?name=${encodeURIComponent(station.station_name)}`)}
+                        >
+                          <p className="text-sm font-medium truncate">{station.station_name}</p>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 비로그인 안내 */}
+                {!user && (
+                  <Card className="p-3 border-border/50 bg-muted/30">
+                    <p className="text-xs text-muted-foreground text-center">
+                      로그인하면 즐겨찾기 정류소를 볼 수 있어요
+                    </p>
+                  </Card>
+                )}
               </div>
             )}
 
@@ -334,6 +365,8 @@ export function MainTabs({ className }: MainTabsProps) {
                     </div>
                   </Card>
                 </Link>
+
+                {/* 내 장소로 빠르게 */}
                 {user && myPlaces.length > 0 && (
                   <div>
                     <h3 className="text-xs font-medium text-muted-foreground mb-2">내 장소로 빠르게</h3>
@@ -356,6 +389,39 @@ export function MainTabs({ className }: MainTabsProps) {
                       ))}
                     </div>
                   </div>
+                )}
+
+                {/* 최근 길찾기 */}
+                {user && routeHistory.length > 0 && (
+                  <div>
+                    <h3 className="text-xs font-medium text-muted-foreground mb-2">최근 길찾기</h3>
+                    <div className="space-y-2">
+                      {routeHistory.slice(0, 5).map((history) => (
+                        <Card
+                          key={history.id}
+                          className="p-2.5 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer"
+                          onClick={() => router.push(`/search?origin=${encodeURIComponent(history.origin_name)}&dest=${encodeURIComponent(history.dest_name)}&sx=${history.origin_x}&sy=${history.origin_y}&ex=${history.dest_x}&ey=${history.dest_y}`)}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">🗺️</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{history.origin_name}</p>
+                              <p className="text-xs text-muted-foreground truncate">→ {history.dest_name}</p>
+                            </div>
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 비로그인 안내 */}
+                {!user && (
+                  <Card className="p-3 border-border/50 bg-muted/30">
+                    <p className="text-xs text-muted-foreground text-center">
+                      로그인하면 최근 길찾기 이력을 볼 수 있어요
+                    </p>
+                  </Card>
                 )}
               </div>
             )}
