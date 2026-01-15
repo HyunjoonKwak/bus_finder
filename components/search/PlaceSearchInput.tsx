@@ -40,6 +40,7 @@ export function PlaceSearchInput({
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<NodeJS.Timeout>(undefined);
+  const justSelectedRef = useRef(false); // 방금 선택했는지 여부
 
   const fetchSuggestions = useCallback(async (query: string) => {
     if (query.length < 2) {
@@ -64,6 +65,12 @@ export function PlaceSearchInput({
   }, []);
 
   useEffect(() => {
+    // 방금 선택한 경우 검색 스킵
+    if (justSelectedRef.current) {
+      justSelectedRef.current = false;
+      return;
+    }
+
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
     }
@@ -96,6 +103,7 @@ export function PlaceSearchInput({
   };
 
   const handleSelectPlace = (place: Place) => {
+    justSelectedRef.current = true; // 선택 후 재검색 방지
     onChange(place.name);
     onSelect(place);
     setIsOpen(false);
