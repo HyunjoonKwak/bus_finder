@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { useSearchStore, MyPlace } from '@/lib/store';
 import { createClient } from '@/lib/supabase/client';
+import { getCurrentPosition } from '@/lib/kakao';
 
 type TabType = 'recent' | 'places' | 'transit' | 'route';
 
@@ -249,8 +250,21 @@ export default function SearchUnifiedPage() {
     router.push(url);
   };
 
-  const handleMyPlaceClick = (place: MyPlace) => {
-    router.push(`/search?dest=${encodeURIComponent(place.placeName)}&ex=${place.x}&ey=${place.y}`);
+  const handleMyPlaceClick = async (place: MyPlace) => {
+    try {
+      // 현재 위치 가져오기
+      const position = await getCurrentPosition();
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+
+      // 현재 위치와 함께 길찾기 페이지로 이동
+      router.push(
+        `/search?origin=${encodeURIComponent('현재 위치')}&sx=${lng}&sy=${lat}&dest=${encodeURIComponent(place.placeName)}&ex=${place.x}&ey=${place.y}`
+      );
+    } catch {
+      // 위치 권한이 없는 경우 도착지만 설정
+      router.push(`/search?dest=${encodeURIComponent(place.placeName)}&ex=${place.x}&ey=${place.y}`);
+    }
   };
 
   const handleRouteHistoryClick = (history: RouteHistoryItem) => {
