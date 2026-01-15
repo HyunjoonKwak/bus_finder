@@ -8,6 +8,11 @@ import { cn } from '@/lib/utils';
 import { useSearchStore } from '@/lib/store';
 import { loadKakaoMapScript, getCurrentPosition } from '@/lib/kakao';
 
+interface Coordinate {
+  x: number;
+  y: number;
+}
+
 interface RouteLeg {
   mode: string;
   duration: number;
@@ -17,6 +22,9 @@ interface RouteLeg {
   endName: string;
   stationCount?: number;
   distance?: number;
+  start?: Coordinate;
+  end?: Coordinate;
+  passCoords?: Coordinate[];
 }
 
 interface RouteResult {
@@ -51,6 +59,8 @@ function SearchContent() {
   const mapRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mapInstanceRef = useRef<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const routeOverlaysRef = useRef<any[]>([]); // 경로 오버레이들 (polylines, markers)
 
   const [routes, setRoutes] = useState<RouteResult[]>([]);
   const [matchedPlaces, setMatchedPlaces] = useState<{ origin?: string; dest?: string }>({});
@@ -110,6 +120,115 @@ function SearchContent() {
 
     initMap();
   }, []);
+
+  // 선택된 경로를 지도에 표시
+  useEffect(() => {
+    if (!mapInstanceRef.current || !mapLoaded || !selectedRoute) return;
+
+    const kakao = window.kakao;
+
+    // 기존 오버레이 제거
+    routeOverlaysRef.current.forEach(overlay => {
+      overlay.setMap(null);
+    });
+    routeOverlaysRef.current = [];
+
+    const bounds = new kakao.maps.LatLngBounds();
+    const colors = {
+      walk: '#9CA3AF', // gray
+      bus: '#3B82F6',  // blue
+      subway: '#22C55E', // green
+    };
+
+    // 출발지 마커
+    if (selectedRoute.origin.x && selectedRoute.origin.y) {
+      const originPos = new kakao.maps.LatLng(selectedRoute.origin.y, selectedRoute.origin.x);
+      bounds.extend(originPos);
+
+      const originMarker = new kakao.maps.CustomOverlay({
+        position: originPos,
+        content: `
+          <div style="position: relative; transform: translate(-50%, -100%);">
+            <div style="background: #3B82F6; color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; white-space: nowrap; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+              출발
+            </div>
+            <div style="width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 6px solid #3B82F6; margin: 0 auto;"></div>
+          </div>
+        `,
+        map: mapInstanceRef.current,
+        zIndex: 10,
+      });
+      routeOverlaysRef.current.push(originMarker);
+    }
+
+    // 도착지 마커
+    if (selectedRoute.destination.x && selectedRoute.destination.y) {
+      const destPos = new kakao.maps.LatLng(selectedRoute.destination.y, selectedRoute.destination.x);
+      bounds.extend(destPos);
+
+      const destMarker = new kakao.maps.CustomOverlay({
+        position: destPos,
+        content: `
+          <div style="position: relative; transform: translate(-50%, -100%);">
+            <div style="background: #EF4444; color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; white-space: nowrap; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+              도착
+            </div>
+            <div style="width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 6px solid #EF4444; margin: 0 auto;"></div>
+          </div>
+        `,
+        map: mapInstanceRef.current,
+        zIndex: 10,
+      });
+      routeOverlaysRef.current.push(destMarker);
+    }
+
+    // 각 leg별 경로 그리기
+    selectedRoute.legs.forEach((leg) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const path: any[] = [];
+
+      // 시작점 추가
+      if (leg.start) {
+        path.push(new kakao.maps.LatLng(leg.start.y, leg.start.x));
+        bounds.extend(path[path.length - 1]);
+      }
+
+      // 경유 좌표 추가
+      if (leg.passCoords && leg.passCoords.length > 0) {
+        leg.passCoords.forEach(coord => {
+          path.push(new kakao.maps.LatLng(coord.y, coord.x));
+          bounds.extend(path[path.length - 1]);
+        });
+      }
+
+      // 끝점 추가
+      if (leg.end) {
+        path.push(new kakao.maps.LatLng(leg.end.y, leg.end.x));
+        bounds.extend(path[path.length - 1]);
+      }
+
+      if (path.length >= 2) {
+        const color = colors[leg.mode as keyof typeof colors] || colors.walk;
+        const polyline = new kakao.maps.Polyline({
+          path,
+          strokeWeight: leg.mode === 'walk' ? 3 : 5,
+          strokeColor: color,
+          strokeOpacity: leg.mode === 'walk' ? 0.6 : 0.8,
+          strokeStyle: leg.mode === 'walk' ? 'shortdash' : 'solid',
+        });
+        polyline.setMap(mapInstanceRef.current);
+        routeOverlaysRef.current.push(polyline);
+      }
+    });
+
+    // 지도 범위 조정
+    // bounds가 유효한지 체크
+    try {
+      mapInstanceRef.current.setBounds(bounds, 50);
+    } catch {
+      // bounds가 비어있으면 무시
+    }
+  }, [selectedRoute, mapLoaded]);
 
   // 경로 검색
   useEffect(() => {

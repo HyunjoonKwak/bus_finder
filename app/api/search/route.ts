@@ -32,14 +32,27 @@ interface ODSayLane {
   subwayCode?: string;
 }
 
+interface ODSayPassStop {
+  stationName?: string;
+  x?: string;
+  y?: string;
+}
+
 interface ODSaySubPath {
   trafficType: number; // 1: 지하철, 2: 버스, 3: 도보
   sectionTime?: number;
   distance?: number;
   startName?: string;
   endName?: string;
+  startX?: number;
+  startY?: number;
+  endX?: number;
+  endY?: number;
   stationCount?: number;
   lane?: ODSayLane[];
+  passStopList?: {
+    stations?: ODSayPassStop[];
+  };
 }
 
 interface ODSayPathInfo {
@@ -64,6 +77,12 @@ interface ODSayResult {
   };
 }
 
+// 좌표 타입
+interface Coordinate {
+  x: number;
+  y: number;
+}
+
 // 경로 Leg 타입
 interface RouteLeg {
   mode: 'walk' | 'bus' | 'subway';
@@ -74,13 +93,16 @@ interface RouteLeg {
   startName: string;
   endName: string;
   stationCount?: number;
+  start?: Coordinate;
+  end?: Coordinate;
+  passCoords?: Coordinate[]; // 경유 좌표 (버스/지하철)
 }
 
 // 경로 타입
 interface Route {
   id: string;
-  origin: { name: string };
-  destination: { name: string };
+  origin: { name: string; x?: number; y?: number };
+  destination: { name: string; x?: number; y?: number };
   totalTime: number;
   totalDistance?: number;
   walkTime: number;
@@ -177,7 +199,13 @@ async function searchTransitRoute(
 }
 
 // ODSay 결과를 앱 형식으로 변환
-function transformODSayResult(data: ODSayResult, originName: string, destName: string): Route[] {
+function transformODSayResult(
+  data: ODSayResult,
+  originName: string,
+  destName: string,
+  originCoords: { lat: number; lng: number },
+  destCoords: { lat: number; lng: number }
+): Route[] {
   if (!data?.result?.path) {
     return [];
   }
@@ -190,6 +218,23 @@ function transformODSayResult(data: ODSayResult, originName: string, destName: s
       .map((sub: ODSaySubPath): RouteLeg | null => {
         const trafficType = sub.trafficType;
 
+        // 경유 좌표 추출
+        const passCoords: Coordinate[] = [];
+        if (sub.passStopList?.stations) {
+          for (const station of sub.passStopList.stations) {
+            if (station.x && station.y) {
+              passCoords.push({
+                x: parseFloat(station.x),
+                y: parseFloat(station.y),
+              });
+            }
+          }
+        }
+
+        // 시작/끝 좌표
+        const start = sub.startX && sub.startY ? { x: sub.startX, y: sub.startY } : undefined;
+        const end = sub.endX && sub.endY ? { x: sub.endX, y: sub.endY } : undefined;
+
         if (trafficType === 3) {
           return {
             mode: 'walk',
@@ -197,6 +242,8 @@ function transformODSayResult(data: ODSayResult, originName: string, destName: s
             distance: sub.distance,
             startName: sub.startName || '출발',
             endName: sub.endName || '도착',
+            start,
+            end,
           };
         } else if (trafficType === 2) {
           return {
@@ -207,6 +254,9 @@ function transformODSayResult(data: ODSayResult, originName: string, destName: s
             startName: sub.startName || '',
             endName: sub.endName || '',
             stationCount: sub.stationCount,
+            start,
+            end,
+            passCoords: passCoords.length > 0 ? passCoords : undefined,
           };
         } else if (trafficType === 1) {
           return {
@@ -217,6 +267,9 @@ function transformODSayResult(data: ODSayResult, originName: string, destName: s
             startName: sub.startName || '',
             endName: sub.endName || '',
             stationCount: sub.stationCount,
+            start,
+            end,
+            passCoords: passCoords.length > 0 ? passCoords : undefined,
           };
         }
         return null;
@@ -233,8 +286,8 @@ function transformODSayResult(data: ODSayResult, originName: string, destName: s
 
     return {
       id: `${index + 1}`,
-      origin: { name: originName },
-      destination: { name: destName },
+      origin: { name: originName, x: originCoords.lng, y: originCoords.lat },
+      destination: { name: destName, x: destCoords.lng, y: destCoords.lat },
       totalTime: info.totalTime,
       totalDistance: info.totalDistance,
       walkTime,
@@ -385,7 +438,13 @@ export async function GET(request: NextRequest) {
     return successResponse({ routes: getMockRoutes(origin, dest) });
   }
 
-  const routes = transformODSayResult(odsayResult, originCoords.placeName, destCoords.placeName);
+  const routes = transformODSayResult(
+    odsayResult,
+    originCoords.placeName,
+    destCoords.placeName,
+    originCoords,
+    destCoords
+  );
 
   if (routes.length === 0) {
     return successResponse({ routes: getMockRoutes(origin, dest) });
