@@ -11,6 +11,18 @@ interface RecentSearch {
   ey?: string;
 }
 
+// 내 장소 타입
+export interface MyPlace {
+  id: string;
+  name: string;
+  placeName: string;
+  address?: string;
+  x: string;
+  y: string;
+  icon: 'home' | 'office' | 'pin';
+  sortOrder: number;
+}
+
 interface SearchState {
   origin: Location | null;
   destination: Location | null;

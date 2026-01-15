@@ -242,6 +242,33 @@ function SearchContent() {
     }
   }, [selectedRoute, mapLoaded]);
 
+  // 길찾기 이력 저장
+  const saveRouteHistory = async (
+    originName: string,
+    originX: string,
+    originY: string,
+    destName: string,
+    destX: string,
+    destY: string
+  ) => {
+    try {
+      await fetch('/api/route-history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          originName,
+          originX,
+          originY,
+          destName,
+          destX,
+          destY,
+        }),
+      });
+    } catch (error) {
+      console.error('Failed to save route history:', error);
+    }
+  };
+
   // 경로 검색
   useEffect(() => {
     if (!origin || !dest) return;
@@ -276,6 +303,19 @@ function SearchContent() {
 
         if (data.routes && data.routes.length > 0) {
           setSelectedRoute(data.routes[0]);
+
+          // 길찾기 이력 저장 (좌표 정보가 있는 경우)
+          const firstRoute = data.routes[0];
+          if (firstRoute.origin.x && firstRoute.origin.y && firstRoute.destination.x && firstRoute.destination.y) {
+            saveRouteHistory(
+              data.matchedOrigin || origin,
+              String(firstRoute.origin.x),
+              String(firstRoute.origin.y),
+              data.matchedDest || dest,
+              String(firstRoute.destination.x),
+              String(firstRoute.destination.y)
+            );
+          }
         }
       } catch (err) {
         setError('경로 검색 중 오류가 발생했습니다.');

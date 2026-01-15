@@ -1,0 +1,367 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+import { createClient } from '@/lib/supabase/client';
+import { MyPlace } from '@/lib/store';
+
+type TabType = 'favorites' | 'station' | 'route' | 'search';
+
+interface FavoriteStation {
+  id: string;
+  station_id: string;
+  station_name: string;
+}
+
+interface FavoriteRoute {
+  id: string;
+  bus_id: string;
+  bus_no: string;
+}
+
+interface ApiMyPlace {
+  id: string;
+  name: string;
+  place_name: string;
+  address: string | null;
+  x: string;
+  y: string;
+  icon: 'home' | 'office' | 'pin';
+  sort_order: number;
+}
+
+interface MainTabsProps {
+  className?: string;
+}
+
+export function MainTabs({ className }: MainTabsProps) {
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<TabType>('favorites');
+  const [user, setUser] = useState<{ id: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // 즐겨찾기 상태
+  const [favoriteStations, setFavoriteStations] = useState<FavoriteStation[]>([]);
+  const [favoriteRoutes, setFavoriteRoutes] = useState<FavoriteRoute[]>([]);
+  const [myPlaces, setMyPlaces] = useState<MyPlace[]>([]);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setUser(user);
+      if (user) {
+        fetchData();
+      } else {
+        setLoading(false);
+      }
+    });
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      const [favStationsRes, favRoutesRes, myPlacesRes] = await Promise.all([
+        fetch('/api/favorites/stations'),
+        fetch('/api/favorites/routes'),
+        fetch('/api/my-places'),
+      ]);
+
+      const [favStationsData, favRoutesData, myPlacesData] = await Promise.all([
+        favStationsRes.json(),
+        favRoutesRes.json(),
+        myPlacesRes.json(),
+      ]);
+
+      setFavoriteStations(favStationsData.stations || []);
+      setFavoriteRoutes(favRoutesData.routes || []);
+
+      // API 응답을 프론트엔드 타입으로 변환
+      const places = (myPlacesData.places || []).map((p: ApiMyPlace) => ({
+        id: p.id,
+        name: p.name,
+        placeName: p.place_name,
+        address: p.address || undefined,
+        x: p.x,
+        y: p.y,
+        icon: p.icon,
+        sortOrder: p.sort_order,
+      }));
+      setMyPlaces(places);
+    } catch (error) {
+      console.error('Fetch data error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const tabs = [
+    { id: 'favorites' as TabType, label: '즐겨찾기', icon: '⭐' },
+    { id: 'station' as TabType, label: '정류소', icon: '🚏' },
+    { id: 'route' as TabType, label: '노선', icon: '🚌' },
+    { id: 'search' as TabType, label: '길찾기', icon: '🗺️' },
+  ];
+
+  const getPlaceIcon = (icon: string) => {
+    switch (icon) {
+      case 'home':
+        return '🏠';
+      case 'office':
+        return '🏢';
+      default:
+        return '📍';
+    }
+  };
+
+  return (
+    <div className={cn('bg-background', className)}>
+      {/* 탭 헤더 */}
+      <div className="flex border-b border-border bg-background/95 backdrop-blur-sm">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={cn(
+              'flex-1 py-3 text-xs font-medium transition-colors relative flex flex-col items-center gap-0.5',
+              activeTab === tab.id
+                ? 'text-primary'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <span className="text-base">{tab.icon}</span>
+            <span>{tab.label}</span>
+            {activeTab === tab.id && (
+              <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-primary rounded-full" />
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* 탭 콘텐츠 */}
+      <div className="p-3 min-h-[200px] max-h-[calc(100dvh-16rem)] overflow-y-auto">
+        {loading ? (
+          <div className="py-8 flex items-center justify-center">
+            <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : (
+          <>
+            {/* 즐겨찾기 탭 */}
+            {activeTab === 'favorites' && (
+              <div className="space-y-4">
+                {!user ? (
+                  <Card className="p-4 border-border/50 bg-primary/5">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                        <span className="text-lg">👤</span>
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">로그인하고 더 편리하게</p>
+                        <p className="text-xs text-muted-foreground">즐겨찾기, 내 장소 등 이용</p>
+                      </div>
+                      <Link href="/login">
+                        <Button size="sm">로그인</Button>
+                      </Link>
+                    </div>
+                  </Card>
+                ) : (
+                  <>
+                    {/* 내 장소 */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-xs font-medium text-muted-foreground">내 장소</h3>
+                        <Link href="/my-places" className="text-xs text-primary hover:underline">
+                          관리
+                        </Link>
+                      </div>
+                      {myPlaces.length === 0 ? (
+                        <Card className="p-3 border-dashed border-2 border-border/50">
+                          <Link href="/my-places" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+                            <span className="text-lg">+</span>
+                            <span>집, 회사 등 자주 가는 장소 등록</span>
+                          </Link>
+                        </Card>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          {myPlaces.map((place) => (
+                            <Card
+                              key={place.id}
+                              className="px-3 py-2 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer"
+                              onClick={() => router.push(`/search?origin=현재위치&dest=${encodeURIComponent(place.placeName)}&ex=${place.x}&ey=${place.y}`)}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span>{getPlaceIcon(place.icon)}</span>
+                                <span className="text-sm font-medium">{place.name}</span>
+                              </div>
+                            </Card>
+                          ))}
+                          {myPlaces.length < 5 && (
+                            <Link href="/my-places">
+                              <Card className="px-3 py-2 border-dashed border-2 border-border/50 hover:bg-accent/50 transition-colors">
+                                <span className="text-sm text-muted-foreground">+ 추가</span>
+                              </Card>
+                            </Link>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 즐겨찾기 정류소 */}
+                    {favoriteStations.length > 0 && (
+                      <div>
+                        <h3 className="text-xs font-medium text-muted-foreground mb-2">정류소</h3>
+                        <div className="grid grid-cols-2 gap-2">
+                          {favoriteStations.slice(0, 4).map((station) => (
+                            <Card
+                              key={station.id}
+                              className="p-2.5 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer"
+                              onClick={() => router.push(`/station/${station.station_id}?name=${encodeURIComponent(station.station_name)}`)}
+                            >
+                              <p className="text-sm font-medium truncate">{station.station_name}</p>
+                            </Card>
+                          ))}
+                        </div>
+                        {favoriteStations.length > 4 && (
+                          <Link href="/bus" className="block text-center text-xs text-primary mt-2 hover:underline">
+                            더보기 ({favoriteStations.length}개)
+                          </Link>
+                        )}
+                      </div>
+                    )}
+
+                    {/* 즐겨찾기 노선 */}
+                    {favoriteRoutes.length > 0 && (
+                      <div>
+                        <h3 className="text-xs font-medium text-muted-foreground mb-2">노선</h3>
+                        <div className="flex flex-wrap gap-2">
+                          {favoriteRoutes.slice(0, 6).map((route) => (
+                            <Card
+                              key={route.id}
+                              className="px-3 py-1.5 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer"
+                              onClick={() => router.push(`/bus/${route.bus_id}?no=${encodeURIComponent(route.bus_no)}`)}
+                            >
+                              <span className="font-bold text-sm text-primary">{route.bus_no}</span>
+                            </Card>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {favoriteStations.length === 0 && favoriteRoutes.length === 0 && myPlaces.length === 0 && (
+                      <div className="py-6 text-center">
+                        <p className="text-sm text-muted-foreground">즐겨찾기가 없습니다</p>
+                        <p className="text-xs text-muted-foreground/70 mt-1">정류소나 노선을 즐겨찾기에 추가해보세요</p>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* 정류소 탭 */}
+            {activeTab === 'station' && (
+              <div className="space-y-3">
+                <Link href="/nearby">
+                  <Card className="p-3 border-border/50 hover:bg-accent/50 transition-colors">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl">📍</span>
+                      <div>
+                        <p className="text-sm font-medium">주변 정류소</p>
+                        <p className="text-xs text-muted-foreground">현재 위치 기준 가까운 정류소</p>
+                      </div>
+                    </div>
+                  </Card>
+                </Link>
+                <Link href="/bus">
+                  <Card className="p-3 border-border/50 hover:bg-accent/50 transition-colors">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl">🔍</span>
+                      <div>
+                        <p className="text-sm font-medium">정류소 검색</p>
+                        <p className="text-xs text-muted-foreground">정류소명으로 검색</p>
+                      </div>
+                    </div>
+                  </Card>
+                </Link>
+              </div>
+            )}
+
+            {/* 노선 탭 */}
+            {activeTab === 'route' && (
+              <div className="space-y-3">
+                <Link href="/bus?tab=route">
+                  <Card className="p-3 border-border/50 hover:bg-accent/50 transition-colors">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl">🚌</span>
+                      <div>
+                        <p className="text-sm font-medium">노선 검색</p>
+                        <p className="text-xs text-muted-foreground">버스 번호로 검색</p>
+                      </div>
+                    </div>
+                  </Card>
+                </Link>
+                {user && favoriteRoutes.length > 0 && (
+                  <div>
+                    <h3 className="text-xs font-medium text-muted-foreground mb-2">즐겨찾기 노선</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {favoriteRoutes.map((route) => (
+                        <Card
+                          key={route.id}
+                          className="px-3 py-1.5 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer"
+                          onClick={() => router.push(`/bus/${route.bus_id}?no=${encodeURIComponent(route.bus_no)}`)}
+                        >
+                          <span className="font-bold text-sm text-primary">{route.bus_no}</span>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 길찾기 탭 */}
+            {activeTab === 'search' && (
+              <div className="space-y-3">
+                <Link href="/search">
+                  <Card className="p-3 border-border/50 hover:bg-accent/50 transition-colors">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl">🗺️</span>
+                      <div>
+                        <p className="text-sm font-medium">경로 검색</p>
+                        <p className="text-xs text-muted-foreground">출발지 → 도착지 대중교통 안내</p>
+                      </div>
+                    </div>
+                  </Card>
+                </Link>
+                {user && myPlaces.length > 0 && (
+                  <div>
+                    <h3 className="text-xs font-medium text-muted-foreground mb-2">내 장소로 빠르게</h3>
+                    <div className="space-y-2">
+                      {myPlaces.slice(0, 3).map((place) => (
+                        <Card
+                          key={place.id}
+                          className="p-2.5 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer"
+                          onClick={() => router.push(`/search?dest=${encodeURIComponent(place.placeName)}&ex=${place.x}&ey=${place.y}`)}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span>{getPlaceIcon(place.icon)}</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium">{place.name}</p>
+                              <p className="text-xs text-muted-foreground truncate">{place.placeName}</p>
+                            </div>
+                            <span className="text-xs text-primary">길찾기</span>
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
