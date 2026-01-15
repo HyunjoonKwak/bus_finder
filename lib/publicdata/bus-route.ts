@@ -26,6 +26,52 @@ export interface BusRouteStation {
   direction?: string; // 방향
 }
 
+/**
+ * 연속된 동일 이름 정류소 병합
+ * 도로 양쪽 정류소나 왕복 노선에서 같은 정류소를 두 번 지나는 경우 처리
+ * @returns 중복 제거된 정류소 목록과 원래 seq → 새 seq 매핑
+ */
+function deduplicateStations(stations: BusRouteStation[]): {
+  stations: BusRouteStation[];
+  seqMap: Map<number, number>; // 원래 sequence → 새 sequence
+} {
+  if (stations.length === 0) return { stations: [], seqMap: new Map() };
+
+  const result: BusRouteStation[] = [];
+  const seqMap = new Map<number, number>();
+  let prevName = '';
+  let newSeq = 0;
+
+  for (const station of stations) {
+    if (station.stationName !== prevName) {
+      // 새로운 정류소
+      newSeq++;
+      result.push({
+        ...station,
+        sequence: newSeq,
+      });
+      prevName = station.stationName;
+    }
+    // 원래 sequence를 새 sequence로 매핑 (중복 포함)
+    seqMap.set(station.sequence, newSeq);
+  }
+
+  return { stations: result, seqMap };
+}
+
+/**
+ * 버스 위치의 stationSeq를 중복 제거된 정류소 목록에 맞게 변환
+ */
+function remapBusPositions(
+  positions: BusPosition[],
+  seqMap: Map<number, number>
+): BusPosition[] {
+  return positions.map((p) => ({
+    ...p,
+    stationSeq: seqMap.get(p.stationSeq) || p.stationSeq,
+  }));
+}
+
 export interface BusPosition {
   plateNo: string; // 차량 번호
   stationSeq: number; // 현재 정류소 순번
@@ -431,5 +477,13 @@ export async function getBusRouteDetail(
     console.error('getBusRouteDetail error:', error);
   }
 
-  return { routeInfo, stations, busPositions };
+  // 연속된 동일 이름 정류소 중복 제거
+  const { stations: dedupedStations, seqMap } = deduplicateStations(stations);
+  const remappedPositions = remapBusPositions(busPositions, seqMap);
+
+  return {
+    routeInfo,
+    stations: dedupedStations,
+    busPositions: remappedPositions,
+  };
 }
