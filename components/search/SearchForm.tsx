@@ -29,8 +29,9 @@ function SearchFormContent({ variant = 'default', onSearch }: SearchFormContentP
   // URL 파라미터에서 선택된 위치 정보 가져오기
   // Note: URL 파라미터를 state로 동기화하는 초기화 패턴으로, 의도적인 설계임
   useEffect(() => {
-    const sname = searchParams.get('sname');
-    const ename = searchParams.get('ename');
+    // sname/ename 또는 origin/dest 파라미터 모두 지원
+    const sname = searchParams.get('sname') || searchParams.get('origin');
+    const ename = searchParams.get('ename') || searchParams.get('dest');
     const sx = searchParams.get('sx');
     const sy = searchParams.get('sy');
     const ex = searchParams.get('ex');
