@@ -100,6 +100,18 @@ function SearchContent() {
         });
         mapInstanceRef.current = map;
 
+        // 줌 컨트롤 추가 (우측)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const zoomControl = new (kakao.maps as any).ZoomControl();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (map as any).addControl(zoomControl, (kakao.maps as any).ControlPosition.RIGHT);
+
+        // 지도 타입 컨트롤 추가 (우측 상단)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const mapTypeControl = new (kakao.maps as any).MapTypeControl();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (map as any).addControl(mapTypeControl, (kakao.maps as any).ControlPosition.TOPRIGHT);
+
         // 현재 위치 마커
         const markerContent = `
           <div style="position: relative;">
@@ -565,32 +577,12 @@ function SearchContent() {
         {/* 현재 위치 버튼 */}
         <button
           onClick={moveToCurrentLocation}
-          className="absolute bottom-4 right-4 z-10 w-10 h-10 bg-white rounded-lg shadow-lg flex items-center justify-center hover:bg-gray-50 transition-colors"
+          className="absolute bottom-4 left-4 z-10 w-10 h-10 bg-white rounded-lg shadow-lg flex items-center justify-center hover:bg-gray-50 transition-colors"
         >
           <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
           </svg>
         </button>
-
-        {/* 줌 컨트롤 */}
-        <div className="absolute bottom-16 right-4 z-10 flex flex-col bg-white rounded-lg shadow-lg overflow-hidden">
-          <button
-            onClick={() => mapInstanceRef.current?.setLevel(mapInstanceRef.current.getLevel() - 1)}
-            className="w-10 h-10 flex items-center justify-center hover:bg-gray-50 transition-colors border-b border-gray-200"
-          >
-            <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-          </button>
-          <button
-            onClick={() => mapInstanceRef.current?.setLevel(mapInstanceRef.current.getLevel() + 1)}
-            className="w-10 h-10 flex items-center justify-center hover:bg-gray-50 transition-colors"
-          >
-            <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
-            </svg>
-          </button>
-        </div>
 
         {/* 지도 로딩 */}
         {!mapLoaded && (
