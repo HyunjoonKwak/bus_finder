@@ -5,6 +5,8 @@ services:
     restart: unless-stopped
     ports:
       - "3400:3000"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
     env_file:
       - .env
     environment:
