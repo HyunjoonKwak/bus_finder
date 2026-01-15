@@ -263,18 +263,22 @@ export async function searchNearbyStations(
     searchSeoulNearbyStations(x, y, radius),
   ]);
 
-  // 중복 제거 (정류소명 + 좌표 기준)
-  const seenKeys = new Set<string>();
-  const allStations: StationInfo[] = [];
+  // 먼저 모든 정류소를 거리순 정렬
+  const allStationsSorted = [...gyeonggiStations, ...seoulStations].sort(
+    (a, b) => (a.distance || 0) - (b.distance || 0)
+  );
 
-  for (const station of [...gyeonggiStations, ...seoulStations]) {
-    const key = `${station.stationName}_${station.x}_${station.y}`;
-    if (!seenKeys.has(key)) {
-      seenKeys.add(key);
-      allStations.push(station);
+  // 같은 이름의 정류소 중 가장 가까운 것만 남기기 (도로 양쪽 정류소 중복 제거)
+  const seenNames = new Set<string>();
+  const uniqueStations: StationInfo[] = [];
+
+  for (const station of allStationsSorted) {
+    // 정류소명만으로 중복 체크 (가장 가까운 것이 먼저 처리됨)
+    if (!seenNames.has(station.stationName)) {
+      seenNames.add(station.stationName);
+      uniqueStations.push(station);
     }
   }
 
-  // 거리순 정렬
-  return allStations.sort((a, b) => (a.distance || 0) - (b.distance || 0));
+  return uniqueStations;
 }
