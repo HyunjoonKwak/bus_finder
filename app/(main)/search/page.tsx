@@ -289,6 +289,14 @@ function SearchContent() {
   }, [origin, dest, searchParams]);
 
   const handleRecentSearch = (search: { origin: string; destination: string }) => {
+    // 기존 검색 결과 초기화
+    setRoutes([]);
+    setSelectedRoute(null);
+    setError(null);
+    setLoading(true);
+    // 검색 탭으로 전환
+    setActiveTab('search');
+
     router.push(`/search?origin=${encodeURIComponent(search.origin)}&dest=${encodeURIComponent(search.destination)}`);
   };
 
