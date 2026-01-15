@@ -52,7 +52,7 @@ type TabType = 'search' | 'recent';
 function SearchContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { recentSearches, removeRecentSearch } = useSearchStore();
+  const { recentSearches, removeRecentSearch, clearSearches } = useSearchStore();
   const origin = searchParams.get('origin');
   const dest = searchParams.get('dest');
 
@@ -494,10 +494,16 @@ function SearchContent() {
             <div>
               {recentSearches.length > 0 ? (
                 <>
-                  <div className="p-3 bg-muted/50 border-b border-border sticky top-0">
+                  <div className="p-3 bg-muted/50 border-b border-border sticky top-0 flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">
                       최근 검색 {recentSearches.length}개
                     </span>
+                    <button
+                      onClick={clearSearches}
+                      className="text-xs text-destructive hover:underline"
+                    >
+                      전체 삭제
+                    </button>
                   </div>
                   <div>
                     {recentSearches.slice(0, 20).map((search, idx) => (
