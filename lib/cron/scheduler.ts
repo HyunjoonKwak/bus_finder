@@ -3,6 +3,7 @@ import { collectArrivals, scanAndSetupTimers } from './collect-arrivals';
 import { checkLastBusAlerts } from './last-bus-alert';
 import { createServiceClient } from '@/lib/supabase/service';
 import { timerManager } from './dynamic-timer';
+import { randomUUID } from 'crypto';
 
 interface SchedulerState {
   isRunning: boolean;
@@ -15,6 +16,8 @@ interface SchedulerState {
   } | null;
   intervalMinutes: number;
   initialized: boolean;
+  lockId: string; // 이 프로세스의 고유 ID
+  heartbeatTimer: NodeJS.Timeout | null; // 락 갱신 타이머
 }
 
 // 싱글톤 상태
@@ -26,7 +29,12 @@ const state: SchedulerState = {
   lastResult: null,
   intervalMinutes: 5,
   initialized: false,
+  lockId: randomUUID(), // 프로세스 고유 ID
+  heartbeatTimer: null,
 };
+
+const LOCK_TIMEOUT_SEC = 60; // 락 만료 시간 (60초)
+const HEARTBEAT_INTERVAL_MS = 30000; // 락 갱신 간격 (30초)
 
 /**
  * 현재 시간이 운영 시간 내인지 확인
@@ -221,7 +229,7 @@ export function startScheduler(intervalMinutes = 5): boolean {
 /**
  * 스케줄러 중지
  */
-export function stopScheduler(): boolean {
+export async function stopScheduler(): Promise<boolean> {
   if (!state.isRunning || !state.task) {
     console.log('[Scheduler] Not running');
     return true;
@@ -233,6 +241,10 @@ export function stopScheduler(): boolean {
 
   // 동적 타이머도 모두 해제
   timerManager.clearAllTimers();
+
+  // 락 heartbeat 중지 및 락 해제
+  stopHeartbeat();
+  await releaseLock();
 
   console.log('[Scheduler] Stopped');
 
@@ -340,8 +352,137 @@ export async function saveSchedulerSettings(
 }
 
 /**
+ * 분산 락 획득 시도
+ * - 락이 없거나 만료된 경우에만 획득 가능
+ * - 이미 이 프로세스가 락을 보유하고 있으면 갱신
+ */
+async function tryAcquireLock(): Promise<boolean> {
+  try {
+    const supabase = createServiceClient();
+    const now = new Date();
+    const expiredThreshold = new Date(now.getTime() - LOCK_TIMEOUT_SEC * 1000);
+
+    // 1. 현재 락 상태 확인
+    const { data: current, error: selectError } = await supabase
+      .from('scheduler_settings')
+      .select('lock_holder_id, lock_acquired_at')
+      .eq('key', 'arrival_collector')
+      .single();
+
+    if (selectError) {
+      console.error('[Scheduler] Failed to check lock:', selectError.message);
+      return false;
+    }
+
+    // 2. 락 획득 가능 여부 판단
+    const canAcquire =
+      !current.lock_holder_id || // 락 없음
+      current.lock_holder_id === state.lockId || // 이미 내가 보유
+      (current.lock_acquired_at && new Date(current.lock_acquired_at) < expiredThreshold); // 만료됨
+
+    if (!canAcquire) {
+      console.log(`[Scheduler] Lock held by another process: ${current.lock_holder_id}`);
+      return false;
+    }
+
+    // 3. 락 획득/갱신 (조건부 업데이트)
+    const { error: updateError } = await supabase
+      .from('scheduler_settings')
+      .update({
+        lock_holder_id: state.lockId,
+        lock_acquired_at: now.toISOString(),
+      })
+      .eq('key', 'arrival_collector')
+      .or(`lock_holder_id.is.null,lock_holder_id.eq.${state.lockId},lock_acquired_at.lt.${expiredThreshold.toISOString()}`);
+
+    if (updateError) {
+      console.error('[Scheduler] Failed to acquire lock:', updateError.message);
+      return false;
+    }
+
+    console.log(`[Scheduler] Lock acquired: ${state.lockId}`);
+    return true;
+  } catch (error) {
+    console.error('[Scheduler] Lock error:', error);
+    return false;
+  }
+}
+
+/**
+ * 락 갱신 (heartbeat)
+ */
+async function renewLock(): Promise<boolean> {
+  try {
+    const supabase = createServiceClient();
+    const { error } = await supabase
+      .from('scheduler_settings')
+      .update({ lock_acquired_at: new Date().toISOString() })
+      .eq('key', 'arrival_collector')
+      .eq('lock_holder_id', state.lockId);
+
+    if (error) {
+      console.error('[Scheduler] Failed to renew lock:', error.message);
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error('[Scheduler] Lock renewal error:', error);
+    return false;
+  }
+}
+
+/**
+ * 락 해제
+ */
+async function releaseLock(): Promise<void> {
+  try {
+    const supabase = createServiceClient();
+    await supabase
+      .from('scheduler_settings')
+      .update({
+        lock_holder_id: null,
+        lock_acquired_at: null,
+      })
+      .eq('key', 'arrival_collector')
+      .eq('lock_holder_id', state.lockId);
+
+    console.log(`[Scheduler] Lock released: ${state.lockId}`);
+  } catch (error) {
+    console.error('[Scheduler] Failed to release lock:', error);
+  }
+}
+
+/**
+ * 락 heartbeat 시작
+ */
+function startHeartbeat(): void {
+  if (state.heartbeatTimer) {
+    clearInterval(state.heartbeatTimer);
+  }
+
+  state.heartbeatTimer = setInterval(async () => {
+    const renewed = await renewLock();
+    if (!renewed) {
+      console.error('[Scheduler] Lost lock, stopping scheduler');
+      stopScheduler();
+    }
+  }, HEARTBEAT_INTERVAL_MS);
+}
+
+/**
+ * 락 heartbeat 중지
+ */
+function stopHeartbeat(): void {
+  if (state.heartbeatTimer) {
+    clearInterval(state.heartbeatTimer);
+    state.heartbeatTimer = null;
+  }
+}
+
+/**
  * 서버 시작 시 DB 설정에 따라 스케줄러 초기화
  * - 동적 타이머 방식 사용 (권장)
+ * - 분산 락으로 중복 실행 방지
  */
 export async function initSchedulerFromDB(): Promise<boolean> {
   if (state.initialized) {
@@ -349,12 +490,22 @@ export async function initSchedulerFromDB(): Promise<boolean> {
     return state.isRunning;
   }
 
-  console.log('[Scheduler] Initializing from DB...');
+  console.log(`[Scheduler] Initializing from DB... (lockId: ${state.lockId})`);
+
+  // 분산 락 획득 시도
+  const lockAcquired = await tryAcquireLock();
+  if (!lockAcquired) {
+    console.log('[Scheduler] Could not acquire lock, another process is running');
+    state.initialized = true;
+    return false;
+  }
+
   const settings = await loadSchedulerSettings();
 
   if (!settings) {
     console.log('[Scheduler] No settings found, skipping initialization');
     state.initialized = true;
+    await releaseLock();
     return false;
   }
 
@@ -363,10 +514,13 @@ export async function initSchedulerFromDB(): Promise<boolean> {
 
   if (settings.enabled) {
     console.log('[Scheduler] Auto-starting dynamic scheduler');
+    // 락 heartbeat 시작
+    startHeartbeat();
     // 동적 타이머 방식 사용
     return startDynamicScheduler();
   }
 
   console.log('[Scheduler] Settings loaded but disabled');
+  await releaseLock();
   return false;
 }

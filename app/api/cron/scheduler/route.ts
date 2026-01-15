@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
         });
 
       case 'stop':
-        const stopped = stopScheduler();
+        const stopped = await stopScheduler();
         if (stopped) {
           // DB에 설정 저장 (현재 interval과 운영 시간 유지)
           const currentStatus = getSchedulerStatus();
