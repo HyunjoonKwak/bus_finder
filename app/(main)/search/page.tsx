@@ -316,6 +316,14 @@ function SearchContent() {
     { id: 'recent' as TabType, label: '최근', icon: '🕐' },
   ];
 
+  const handleTabChange = (tabId: TabType) => {
+    setActiveTab(tabId);
+    // 탭 전환 시 선택된 경로 패널 닫기
+    if (tabId === 'recent') {
+      setSelectedRoute(null);
+    }
+  };
+
   return (
     <div className="flex flex-col md:flex-row h-[calc(100vh-3rem)] overflow-hidden">
       {/* 사이드 패널 - 모바일에서는 하단에서 올라오는 시트 형태 */}
@@ -343,7 +351,7 @@ function SearchContent() {
             {tabs.map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => handleTabChange(tab.id)}
                 className={cn(
                   "flex-1 py-1.5 px-2 md:py-2 md:px-3 rounded-lg text-xs md:text-sm font-medium transition-colors",
                   activeTab === tab.id
