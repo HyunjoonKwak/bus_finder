@@ -214,8 +214,9 @@ function transformODSayResult(
     const info = path.info;
     const subPaths = path.subPath || [];
 
+    // 먼저 모든 subPath를 RouteLeg로 변환
     const legs: RouteLeg[] = subPaths
-      .map((sub: ODSaySubPath): RouteLeg | null => {
+      .map((sub: ODSaySubPath, subIndex: number): RouteLeg | null => {
         const trafficType = sub.trafficType;
 
         // 경유 좌표 추출
@@ -231,9 +232,46 @@ function transformODSayResult(
           }
         }
 
-        // 시작/끝 좌표
-        const start = sub.startX && sub.startY ? { x: sub.startX, y: sub.startY } : undefined;
-        const end = sub.endX && sub.endY ? { x: sub.endX, y: sub.endY } : undefined;
+        // 시작/끝 좌표 (버스/지하철은 직접 제공, 도보는 인접 구간에서 추론)
+        let start = sub.startX && sub.startY ? { x: sub.startX, y: sub.startY } : undefined;
+        let end = sub.endX && sub.endY ? { x: sub.endX, y: sub.endY } : undefined;
+
+        // 도보 구간의 좌표 추론
+        if (trafficType === 3 && (!start || !end)) {
+          // 이전 구간의 끝점을 시작점으로
+          if (!start && subIndex > 0) {
+            const prevSub = subPaths[subIndex - 1];
+            if (prevSub.endX && prevSub.endY) {
+              start = { x: prevSub.endX, y: prevSub.endY };
+            } else if (prevSub.passStopList?.stations?.length) {
+              const lastStation = prevSub.passStopList.stations[prevSub.passStopList.stations.length - 1];
+              if (lastStation.x && lastStation.y) {
+                start = { x: parseFloat(lastStation.x), y: parseFloat(lastStation.y) };
+              }
+            }
+          }
+          // 첫 번째 도보 구간이면 출발지 좌표 사용
+          if (!start && subIndex === 0) {
+            start = { x: originCoords.lng, y: originCoords.lat };
+          }
+
+          // 다음 구간의 시작점을 끝점으로
+          if (!end && subIndex < subPaths.length - 1) {
+            const nextSub = subPaths[subIndex + 1];
+            if (nextSub.startX && nextSub.startY) {
+              end = { x: nextSub.startX, y: nextSub.startY };
+            } else if (nextSub.passStopList?.stations?.length) {
+              const firstStation = nextSub.passStopList.stations[0];
+              if (firstStation.x && firstStation.y) {
+                end = { x: parseFloat(firstStation.x), y: parseFloat(firstStation.y) };
+              }
+            }
+          }
+          // 마지막 도보 구간이면 도착지 좌표 사용
+          if (!end && subIndex === subPaths.length - 1) {
+            end = { x: destCoords.lng, y: destCoords.lat };
+          }
+        }
 
         if (trafficType === 3) {
           return {
