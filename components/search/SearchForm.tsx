@@ -56,7 +56,10 @@ function SearchFormContent({ variant = 'default', onSearch }: SearchFormContentP
     e.preventDefault();
     if (!origin || !destination) return;
 
-    addRecentSearch(origin, destination);
+    // 검색 기록은 실제 선택된 장소명으로 저장 (입력값이 아닌 선택된 장소명)
+    const actualOrigin = originPlace?.name || origin;
+    const actualDest = destPlace?.name || destination;
+    addRecentSearch(actualOrigin, actualDest);
 
     // onSearch 콜백이 있으면 직접 호출, 없으면 페이지 이동
     if (onSearch) {

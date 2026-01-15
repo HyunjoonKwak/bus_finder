@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { SearchFilters, Location } from '@/types';
 
 interface SearchState {
@@ -21,41 +22,49 @@ const defaultFilters: SearchFilters = {
   isRainy: false,
 };
 
-export const useSearchStore = create<SearchState>((set) => ({
-  origin: null,
-  destination: null,
-  filters: defaultFilters,
-  recentSearches: [],
-
-  setOrigin: (origin) => set({ origin }),
-
-  setDestination: (destination) => set({ destination }),
-
-  setFilters: (filters) =>
-    set((state) => ({
-      filters: { ...state.filters, ...filters },
-    })),
-
-  addRecentSearch: (origin, destination) =>
-    set((state) => {
-      const newSearch = { origin, destination };
-      const filtered = state.recentSearches.filter(
-        (s) => s.origin !== origin || s.destination !== destination
-      );
-      return {
-        recentSearches: [newSearch, ...filtered].slice(0, 5),
-      };
-    }),
-
-  clearSearch: () =>
-    set({
+export const useSearchStore = create<SearchState>()(
+  persist(
+    (set) => ({
       origin: null,
       destination: null,
       filters: defaultFilters,
-    }),
-
-  clearSearches: () =>
-    set({
       recentSearches: [],
+
+      setOrigin: (origin) => set({ origin }),
+
+      setDestination: (destination) => set({ destination }),
+
+      setFilters: (filters) =>
+        set((state) => ({
+          filters: { ...state.filters, ...filters },
+        })),
+
+      addRecentSearch: (origin, destination) =>
+        set((state) => {
+          const newSearch = { origin, destination };
+          const filtered = state.recentSearches.filter(
+            (s) => s.origin !== origin || s.destination !== destination
+          );
+          return {
+            recentSearches: [newSearch, ...filtered].slice(0, 10),
+          };
+        }),
+
+      clearSearch: () =>
+        set({
+          origin: null,
+          destination: null,
+          filters: defaultFilters,
+        }),
+
+      clearSearches: () =>
+        set({
+          recentSearches: [],
+        }),
     }),
-}));
+    {
+      name: 'search-storage',
+      partialize: (state) => ({ recentSearches: state.recentSearches }),
+    }
+  )
+);
