@@ -257,6 +257,19 @@ export default function SearchUnifiedPage() {
       const lat = position.coords.latitude;
       const lng = position.coords.longitude;
 
+      // 현재 위치와 선택한 장소 사이의 거리 계산
+      const destLat = parseFloat(place.y);
+      const destLng = parseFloat(place.x);
+      const distance = Math.sqrt(
+        Math.pow(lat - destLat, 2) + Math.pow(lng - destLng, 2)
+      );
+
+      // 약 100m 이내면 너무 가까움
+      if (distance < 0.001) {
+        alert('현재 위치와 도착지가 너무 가깝습니다.');
+        return;
+      }
+
       // 현재 위치와 함께 길찾기 페이지로 이동
       router.push(
         `/search?origin=${encodeURIComponent('현재 위치')}&sx=${lng}&sy=${lat}&dest=${encodeURIComponent(place.placeName)}&ex=${place.x}&ey=${place.y}`
@@ -391,7 +404,7 @@ export default function SearchUnifiedPage() {
                 {searchResults.map((result) => (
                   <Card
                     key={result.id}
-                    className="p-3 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer"
+                    className="p-3 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer select-none touch-manipulation"
                     onClick={() => handleResultClick(result)}
                   >
                     <div className="flex items-center gap-3">
@@ -426,7 +439,7 @@ export default function SearchUnifiedPage() {
                   {myPlaces.slice(0, 3).map((place) => (
                     <Card
                       key={`place-${place.id}`}
-                      className="p-3 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer"
+                      className="p-3 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer select-none touch-manipulation"
                       onClick={() => handleMyPlaceClick(place)}
                     >
                       <div className="flex items-center gap-3">
@@ -451,7 +464,7 @@ export default function SearchUnifiedPage() {
                   {favoriteStations.slice(0, 3).map((station) => (
                     <Card
                       key={`station-${station.stationId}`}
-                      className="p-3 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer"
+                      className="p-3 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer select-none touch-manipulation"
                       onClick={() => handleFavoriteStationClick(station)}
                     >
                       <div className="flex items-center gap-3">
@@ -477,7 +490,7 @@ export default function SearchUnifiedPage() {
                   {favoriteRoutes.slice(0, 3).map((route) => (
                     <Card
                       key={`route-${route.busId}`}
-                      className="p-3 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer"
+                      className="p-3 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer select-none touch-manipulation"
                       onClick={() => handleFavoriteRouteClick(route)}
                     >
                       <div className="flex items-center gap-3">
@@ -505,7 +518,7 @@ export default function SearchUnifiedPage() {
                   {routeHistory.slice(0, 5).map((history) => (
                     <Card
                       key={`history-${history.id}`}
-                      className="p-3 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer"
+                      className="p-3 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer select-none touch-manipulation"
                       onClick={() => handleRouteHistoryClick(history)}
                     >
                       <div className="flex items-center gap-3">
@@ -562,7 +575,7 @@ export default function SearchUnifiedPage() {
                 {myPlaces.map((place) => (
                   <Card
                     key={place.id}
-                    className="p-3 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer"
+                    className="p-3 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer select-none touch-manipulation"
                     onClick={() => handleMyPlaceClick(place)}
                   >
                     <div className="flex items-center gap-3">
@@ -614,7 +627,7 @@ export default function SearchUnifiedPage() {
                       {favoriteStations.map((station) => (
                         <Card
                           key={station.stationId}
-                          className="p-3 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer"
+                          className="p-3 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer select-none touch-manipulation"
                           onClick={() => handleFavoriteStationClick(station)}
                         >
                           <div className="flex items-center gap-3">
@@ -640,7 +653,7 @@ export default function SearchUnifiedPage() {
                       {favoriteRoutes.map((route) => (
                         <Card
                           key={route.busId}
-                          className="p-3 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer"
+                          className="p-3 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer select-none touch-manipulation"
                           onClick={() => handleFavoriteRouteClick(route)}
                         >
                           <div className="flex items-center gap-3">
@@ -687,7 +700,7 @@ export default function SearchUnifiedPage() {
                 {routeHistory.map((history) => (
                   <Card
                     key={history.id}
-                    className="p-3 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer"
+                    className="p-3 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer select-none touch-manipulation"
                     onClick={() => handleRouteHistoryClick(history)}
                   >
                     <div className="flex items-center gap-3">

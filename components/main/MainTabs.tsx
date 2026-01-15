@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
 import { MyPlace } from '@/lib/store';
+import { getCurrentPosition } from '@/lib/kakao';
 
 type TabType = 'favorites' | 'station' | 'route' | 'search';
 
@@ -130,6 +131,33 @@ export function MainTabs({ className }: MainTabsProps) {
     }
   };
 
+  const handleMyPlaceClick = async (place: MyPlace) => {
+    try {
+      const position = await getCurrentPosition();
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+
+      // 현재 위치와 선택한 장소 사이의 거리 계산 (단순 좌표 차이)
+      const destLat = parseFloat(place.y);
+      const destLng = parseFloat(place.x);
+      const distance = Math.sqrt(
+        Math.pow(lat - destLat, 2) + Math.pow(lng - destLng, 2)
+      );
+
+      // 약 100m 이내면 (좌표 차이 약 0.001) 너무 가까움
+      if (distance < 0.001) {
+        alert('현재 위치와 도착지가 너무 가깝습니다.');
+        return;
+      }
+
+      router.push(
+        `/search?origin=${encodeURIComponent('현재 위치')}&sx=${lng}&sy=${lat}&dest=${encodeURIComponent(place.placeName)}&ex=${place.x}&ey=${place.y}`
+      );
+    } catch {
+      router.push(`/search?dest=${encodeURIComponent(place.placeName)}&ex=${place.x}&ey=${place.y}`);
+    }
+  };
+
   return (
     <div className={cn('bg-background', className)}>
       {/* 탭 헤더 */}
@@ -202,8 +230,8 @@ export function MainTabs({ className }: MainTabsProps) {
                           {myPlaces.map((place) => (
                             <Card
                               key={place.id}
-                              className="px-3 py-2 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer"
-                              onClick={() => router.push(`/search?origin=현재위치&dest=${encodeURIComponent(place.placeName)}&ex=${place.x}&ey=${place.y}`)}
+                              className="px-3 py-2 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer select-none touch-manipulation"
+                              onClick={() => handleMyPlaceClick(place)}
                             >
                               <div className="flex items-center gap-2">
                                 <span>{getPlaceIcon(place.icon)}</span>
@@ -230,7 +258,7 @@ export function MainTabs({ className }: MainTabsProps) {
                           {favoriteStations.slice(0, 4).map((station) => (
                             <Card
                               key={station.id}
-                              className="p-2.5 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer"
+                              className="p-2.5 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer select-none touch-manipulation"
                               onClick={() => router.push(`/station/${station.station_id}?name=${encodeURIComponent(station.station_name)}`)}
                             >
                               <p className="text-sm font-medium truncate">{station.station_name}</p>
@@ -253,7 +281,7 @@ export function MainTabs({ className }: MainTabsProps) {
                           {favoriteRoutes.slice(0, 6).map((route) => (
                             <Card
                               key={route.id}
-                              className="px-3 py-1.5 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer"
+                              className="px-3 py-1.5 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer select-none touch-manipulation"
                               onClick={() => router.push(`/bus/${route.bus_id}?no=${encodeURIComponent(route.bus_no)}`)}
                             >
                               <span className="font-bold text-sm text-primary">{route.bus_no}</span>
@@ -297,7 +325,7 @@ export function MainTabs({ className }: MainTabsProps) {
                       {favoriteStations.map((station) => (
                         <Card
                           key={station.id}
-                          className="p-2.5 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer"
+                          className="p-2.5 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer select-none touch-manipulation"
                           onClick={() => router.push(`/station/${station.station_id}?name=${encodeURIComponent(station.station_name)}`)}
                         >
                           <p className="text-sm font-medium truncate">{station.station_name}</p>
@@ -339,7 +367,7 @@ export function MainTabs({ className }: MainTabsProps) {
                       {favoriteRoutes.map((route) => (
                         <Card
                           key={route.id}
-                          className="px-3 py-1.5 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer"
+                          className="px-3 py-1.5 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer select-none touch-manipulation"
                           onClick={() => router.push(`/bus/${route.bus_id}?no=${encodeURIComponent(route.bus_no)}`)}
                         >
                           <span className="font-bold text-sm text-primary">{route.bus_no}</span>
@@ -374,8 +402,8 @@ export function MainTabs({ className }: MainTabsProps) {
                       {myPlaces.slice(0, 3).map((place) => (
                         <Card
                           key={place.id}
-                          className="p-2.5 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer"
-                          onClick={() => router.push(`/search?dest=${encodeURIComponent(place.placeName)}&ex=${place.x}&ey=${place.y}`)}
+                          className="p-2.5 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer select-none touch-manipulation"
+                          onClick={() => handleMyPlaceClick(place)}
                         >
                           <div className="flex items-center gap-2">
                             <span>{getPlaceIcon(place.icon)}</span>
@@ -399,7 +427,7 @@ export function MainTabs({ className }: MainTabsProps) {
                       {routeHistory.slice(0, 5).map((history) => (
                         <Card
                           key={history.id}
-                          className="p-2.5 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer"
+                          className="p-2.5 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer select-none touch-manipulation"
                           onClick={() => router.push(`/search?origin=${encodeURIComponent(history.origin_name)}&dest=${encodeURIComponent(history.dest_name)}&sx=${history.origin_x}&sy=${history.origin_y}&ex=${history.dest_x}&ey=${history.dest_y}`)}
                         >
                           <div className="flex items-center gap-2">
