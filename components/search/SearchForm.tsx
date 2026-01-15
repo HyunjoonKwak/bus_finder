@@ -37,18 +37,32 @@ function SearchFormContent({ variant = 'default', onSearch }: SearchFormContentP
     const ex = searchParams.get('ex');
     const ey = searchParams.get('ey');
 
-    // 변경이 필요한 경우에만 state 업데이트
+    // 출발지 업데이트
     if (sname && sname !== origin) {
       setOrigin(sname);
     }
-    if (sname && sx && sy && (!originPlace || originPlace.name !== sname)) {
-      setOriginPlace({ name: sname, x: sx, y: sy });
+    // 좌표가 있으면 장소 설정, 없으면 초기화 (이전 값 제거)
+    if (sname && sx && sy) {
+      if (!originPlace || originPlace.name !== sname) {
+        setOriginPlace({ name: sname, x: sx, y: sy });
+      }
+    } else if (sname) {
+      // 좌표 없이 이름만 있는 경우 기존 장소 정보 초기화
+      setOriginPlace(null);
     }
+
+    // 도착지 업데이트
     if (ename && ename !== destination) {
       setDestination(ename);
     }
-    if (ename && ex && ey && (!destPlace || destPlace.name !== ename)) {
-      setDestPlace({ name: ename, x: ex, y: ey });
+    // 좌표가 있으면 장소 설정, 없으면 초기화 (이전 값 제거)
+    if (ename && ex && ey) {
+      if (!destPlace || destPlace.name !== ename) {
+        setDestPlace({ name: ename, x: ex, y: ey });
+      }
+    } else if (ename) {
+      // 좌표 없이 이름만 있는 경우 기존 장소 정보 초기화
+      setDestPlace(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- URL 파라미터 초기화용, origin/destination 추가시 무한 루프
   }, [searchParams]);
