@@ -288,7 +288,7 @@ function SearchContent() {
     fetchRoutes();
   }, [origin, dest, searchParams]);
 
-  const handleRecentSearch = (search: { origin: string; destination: string }) => {
+  const handleRecentSearch = (search: { origin: string; destination: string; sx?: string; sy?: string; ex?: string; ey?: string }) => {
     // 기존 검색 결과 초기화
     setRoutes([]);
     setSelectedRoute(null);
@@ -297,7 +297,15 @@ function SearchContent() {
     // 검색 탭으로 전환
     setActiveTab('search');
 
-    router.push(`/search?origin=${encodeURIComponent(search.origin)}&dest=${encodeURIComponent(search.destination)}`);
+    // URL 생성 (좌표가 있으면 함께 전달)
+    let url = `/search?origin=${encodeURIComponent(search.origin)}&dest=${encodeURIComponent(search.destination)}`;
+    if (search.sx && search.sy) {
+      url += `&sx=${search.sx}&sy=${search.sy}`;
+    }
+    if (search.ex && search.ey) {
+      url += `&ex=${search.ex}&ey=${search.ey}`;
+    }
+    router.push(url);
   };
 
   const handleRouteSelect = (route: RouteResult) => {

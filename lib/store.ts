@@ -2,15 +2,24 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { SearchFilters, Location } from '@/types';
 
+interface RecentSearch {
+  origin: string;
+  destination: string;
+  sx?: string;
+  sy?: string;
+  ex?: string;
+  ey?: string;
+}
+
 interface SearchState {
   origin: Location | null;
   destination: Location | null;
   filters: SearchFilters;
-  recentSearches: { origin: string; destination: string }[];
+  recentSearches: RecentSearch[];
   setOrigin: (origin: Location | null) => void;
   setDestination: (destination: Location | null) => void;
   setFilters: (filters: Partial<SearchFilters>) => void;
-  addRecentSearch: (origin: string, destination: string) => void;
+  addRecentSearch: (search: RecentSearch) => void;
   removeRecentSearch: (index: number) => void;
   clearSearch: () => void;
   clearSearches: () => void;
@@ -40,14 +49,13 @@ export const useSearchStore = create<SearchState>()(
           filters: { ...state.filters, ...filters },
         })),
 
-      addRecentSearch: (origin, destination) =>
+      addRecentSearch: (search) =>
         set((state) => {
-          const newSearch = { origin, destination };
           const filtered = state.recentSearches.filter(
-            (s) => s.origin !== origin || s.destination !== destination
+            (s) => s.origin !== search.origin || s.destination !== search.destination
           );
           return {
-            recentSearches: [newSearch, ...filtered].slice(0, 10),
+            recentSearches: [search, ...filtered].slice(0, 10),
           };
         }),
 

@@ -71,10 +71,17 @@ function SearchFormContent({ variant = 'default', onSearch }: SearchFormContentP
     e.preventDefault();
     if (!origin || !destination) return;
 
-    // 검색 기록은 실제 선택된 장소명으로 저장 (입력값이 아닌 선택된 장소명)
+    // 검색 기록은 실제 선택된 장소명과 좌표 함께 저장
     const actualOrigin = originPlace?.name || origin;
     const actualDest = destPlace?.name || destination;
-    addRecentSearch(actualOrigin, actualDest);
+    addRecentSearch({
+      origin: actualOrigin,
+      destination: actualDest,
+      sx: originPlace?.x,
+      sy: originPlace?.y,
+      ex: destPlace?.x,
+      ey: destPlace?.y,
+    });
 
     // onSearch 콜백이 있으면 직접 호출, 없으면 페이지 이동
     if (onSearch) {
