@@ -11,6 +11,7 @@ interface SearchState {
   setDestination: (destination: Location | null) => void;
   setFilters: (filters: Partial<SearchFilters>) => void;
   addRecentSearch: (origin: string, destination: string) => void;
+  removeRecentSearch: (index: number) => void;
   clearSearch: () => void;
   clearSearches: () => void;
 }
@@ -49,6 +50,11 @@ export const useSearchStore = create<SearchState>()(
             recentSearches: [newSearch, ...filtered].slice(0, 10),
           };
         }),
+
+      removeRecentSearch: (index) =>
+        set((state) => ({
+          recentSearches: state.recentSearches.filter((_, i) => i !== index),
+        })),
 
       clearSearch: () =>
         set({

@@ -52,7 +52,7 @@ type TabType = 'search' | 'recent';
 function SearchContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { recentSearches } = useSearchStore();
+  const { recentSearches, removeRecentSearch } = useSearchStore();
   const origin = searchParams.get('origin');
   const dest = searchParams.get('dest');
 
@@ -493,29 +493,43 @@ function SearchContent() {
                   </div>
                   <div>
                     {recentSearches.slice(0, 20).map((search, idx) => (
-                      <button
+                      <div
                         key={idx}
-                        onClick={() => handleRecentSearch(search)}
-                        className="w-full p-4 text-left border-b border-border hover:bg-accent/50 transition-colors"
+                        className="flex items-center border-b border-border hover:bg-accent/50 transition-colors"
                       >
-                        <div className="flex items-center gap-3">
-                          <svg className="w-4 h-4 text-muted-foreground flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center text-sm">
-                              <span className="truncate font-medium">{search.origin}</span>
-                              <svg className="mx-2 h-3 w-3 text-muted-foreground flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                              </svg>
-                              <span className="truncate">{search.destination}</span>
+                        <button
+                          onClick={() => handleRecentSearch(search)}
+                          className="flex-1 p-3 text-left"
+                        >
+                          <div className="flex items-start gap-3">
+                            <svg className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1 text-sm mb-0.5">
+                                <span className="text-blue-500 text-xs">출발</span>
+                                <span className="font-medium">{search.origin}</span>
+                              </div>
+                              <div className="flex items-center gap-1 text-sm">
+                                <span className="text-red-500 text-xs">도착</span>
+                                <span className="text-muted-foreground">{search.destination}</span>
+                              </div>
                             </div>
                           </div>
-                          <svg className="w-4 h-4 text-muted-foreground flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeRecentSearch(idx);
+                          }}
+                          className="p-3 hover:bg-destructive/10 transition-colors"
+                          title="삭제"
+                        >
+                          <svg className="w-4 h-4 text-muted-foreground hover:text-destructive" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                           </svg>
-                        </div>
-                      </button>
+                        </button>
+                      </div>
                     ))}
                   </div>
                 </>
