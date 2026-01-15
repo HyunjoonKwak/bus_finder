@@ -9,19 +9,9 @@ import type { StationInfo, BusLaneInfo } from '@/lib/odsay/types';
 import { cn } from '@/lib/utils';
 import { getBusTypeStyle } from '@/lib/bus-utils';
 import type { NearbyStation } from '@/components/station/NearbyStations';
+import type { RecentStation, RecentRoute } from '@/lib/store';
 
 type SearchMode = 'station' | 'bus' | 'search' | 'tracking';
-
-interface SearchHistoryItem {
-  type: 'station' | 'bus';
-  id: string;
-  name: string;
-  subInfo?: string;
-  x?: string;
-  y?: string;
-  arsID?: string;
-  timestamp: number;
-}
 
 interface TrackingTarget {
   id: string;
@@ -47,10 +37,15 @@ interface MobileSearchOverlayProps {
   searchRadius?: number;
   onRadiusChange?: (radius: number) => void;
   onRefreshNearby?: () => void;
-  // Search history props
-  searchHistory?: SearchHistoryItem[];
-  onClearHistory?: () => void;
-  onRemoveHistoryItem?: (type: string, id: string) => void;
+  // Recent history props (Zustand store)
+  recentStations?: RecentStation[];
+  recentRoutes?: RecentRoute[];
+  onRecentStationSelect?: (station: RecentStation) => void;
+  onRecentRouteSelect?: (route: RecentRoute) => void;
+  onRemoveRecentStation?: (stationId: string) => void;
+  onRemoveRecentRoute?: (busId: string) => void;
+  onClearRecentStations?: () => void;
+  onClearRecentRoutes?: () => void;
   // Tracking props
   trackingTargets?: TrackingTarget[];
   loadingTracking?: boolean;
@@ -68,9 +63,14 @@ export function MobileSearchOverlay({
   searchRadius = 500,
   onRadiusChange,
   onRefreshNearby,
-  searchHistory = [],
-  onClearHistory,
-  onRemoveHistoryItem,
+  recentStations = [],
+  recentRoutes = [],
+  onRecentStationSelect,
+  onRecentRouteSelect,
+  onRemoveRecentStation,
+  onRemoveRecentRoute,
+  onClearRecentStations,
+  onClearRecentRoutes,
   trackingTargets = [],
   loadingTracking,
   onRemoveTracking,
@@ -233,16 +233,16 @@ export function MobileSearchOverlay({
             )}
 
             {/* Search history for stations */}
-            {searchHistory.filter(h => h.type === 'station').length > 0 && (
+            {recentStations.length > 0 && (
               <div className="mt-6 pt-4 border-t border-border">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <Clock className="w-4 h-4 text-muted-foreground" />
                     <span className="font-medium text-sm">최근 검색</span>
                   </div>
-                  {onClearHistory && (
+                  {onClearRecentStations && (
                     <button
-                      onClick={onClearHistory}
+                      onClick={onClearRecentStations}
                       className="text-xs text-muted-foreground hover:text-foreground"
                     >
                       전체 삭제
@@ -250,31 +250,35 @@ export function MobileSearchOverlay({
                   )}
                 </div>
                 <div className="space-y-1">
-                  {searchHistory.filter(h => h.type === 'station').slice(0, 5).map((item) => (
+                  {recentStations.slice(0, 5).map((station) => (
                     <div
-                      key={`${item.type}-${item.id}`}
+                      key={`station-${station.stationId}`}
                       className="flex items-center gap-2 p-2 rounded-lg hover:bg-accent/50"
                     >
                       <button
                         onClick={() => {
-                          onSelectStation({
-                            stationID: item.id,
-                            stationName: item.name,
-                            x: item.x || '',
-                            y: item.y || '',
-                            CID: 1,
-                            arsID: item.arsID,
-                          });
+                          if (onRecentStationSelect) {
+                            onRecentStationSelect(station);
+                          } else {
+                            onSelectStation({
+                              stationID: station.stationId,
+                              stationName: station.stationName,
+                              x: station.x || '',
+                              y: station.y || '',
+                              CID: 1,
+                              arsID: station.arsId,
+                            });
+                          }
                           onClose();
                         }}
                         className="flex-1 flex items-center gap-2 text-left"
                       >
                         <MapPin className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                        <span className="text-sm truncate">{item.name}</span>
+                        <span className="text-sm truncate">{station.stationName}</span>
                       </button>
-                      {onRemoveHistoryItem && (
+                      {onRemoveRecentStation && (
                         <button
-                          onClick={() => onRemoveHistoryItem(item.type, item.id)}
+                          onClick={() => onRemoveRecentStation(station.stationId)}
                           className="p-1 rounded hover:bg-accent"
                         >
                           <X className="w-3.5 h-3.5 text-muted-foreground" />
@@ -291,16 +295,16 @@ export function MobileSearchOverlay({
         {/* Bus mode - show search history */}
         {mode === 'bus' && (
           <div className="p-4">
-            {searchHistory.filter(h => h.type === 'bus').length > 0 ? (
+            {recentRoutes.length > 0 ? (
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <Clock className="w-4 h-4 text-muted-foreground" />
                     <span className="font-medium text-sm">최근 검색</span>
                   </div>
-                  {onClearHistory && (
+                  {onClearRecentRoutes && (
                     <button
-                      onClick={onClearHistory}
+                      onClick={onClearRecentRoutes}
                       className="text-xs text-muted-foreground hover:text-foreground"
                     >
                       전체 삭제
@@ -308,35 +312,39 @@ export function MobileSearchOverlay({
                   )}
                 </div>
                 <div className="space-y-1">
-                  {searchHistory.filter(h => h.type === 'bus').slice(0, 10).map((item) => (
+                  {recentRoutes.slice(0, 10).map((route) => (
                     <div
-                      key={`${item.type}-${item.id}`}
+                      key={`route-${route.busId}`}
                       className="flex items-center gap-2 p-2 rounded-lg hover:bg-accent/50"
                     >
                       <button
                         onClick={() => {
-                          onSelectBus({
-                            busID: item.id,
-                            busNo: item.name,
-                            type: 0,
-                            busStartPoint: item.subInfo?.split(' → ')[0] || '',
-                            busEndPoint: item.subInfo?.split(' → ')[1] || '',
-                          } as BusLaneInfo);
+                          if (onRecentRouteSelect) {
+                            onRecentRouteSelect(route);
+                          } else {
+                            onSelectBus({
+                              busID: route.busId,
+                              busNo: route.busNo,
+                              type: route.busType ?? 0,
+                              busStartPoint: route.subInfo?.split(' → ')[0] || '',
+                              busEndPoint: route.subInfo?.split(' → ')[1] || '',
+                            } as BusLaneInfo);
+                          }
                           onClose();
                         }}
                         className="flex-1 flex items-center gap-2 text-left"
                       >
                         <Bus className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                         <div className="min-w-0">
-                          <span className="text-sm font-medium">{item.name}</span>
-                          {item.subInfo && (
-                            <p className="text-xs text-muted-foreground truncate">{item.subInfo}</p>
+                          <span className="text-sm font-medium">{route.busNo}</span>
+                          {route.subInfo && (
+                            <p className="text-xs text-muted-foreground truncate">{route.subInfo}</p>
                           )}
                         </div>
                       </button>
-                      {onRemoveHistoryItem && (
+                      {onRemoveRecentRoute && (
                         <button
-                          onClick={() => onRemoveHistoryItem(item.type, item.id)}
+                          onClick={() => onRemoveRecentRoute(route.busId)}
                           className="p-1 rounded hover:bg-accent"
                         >
                           <X className="w-3.5 h-3.5 text-muted-foreground" />

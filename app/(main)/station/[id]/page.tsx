@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { ArrivalInfo } from '@/components/station/ArrivalInfo';
 import type { RealtimeArrivalInfo } from '@/lib/odsay/types';
 import { createClient } from '@/lib/supabase/client';
+import { useSearchStore } from '@/lib/store';
 
 const REFRESH_INTERVAL = 15; // 15초마다 새로고침
 
@@ -21,6 +22,7 @@ function StationDetailContent() {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
+  const { addRecentStation } = useSearchStore();
   const stationId = params.id as string;
   const stationName = searchParams.get('name') || '정류소';
   const arsId = searchParams.get('arsId') || '';
@@ -131,6 +133,13 @@ function StationDetailContent() {
         // 추적 대상 확인
         fetchTrackingTargets();
       }
+    });
+
+    // 최근 검색 이력에 저장
+    addRecentStation({
+      stationId,
+      stationName,
+      arsId: arsId || undefined,
     });
 
     // 도착 정보 가져오기

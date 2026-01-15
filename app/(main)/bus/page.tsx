@@ -9,6 +9,7 @@ import { loadKakaoMapScript, getCurrentPosition } from '@/lib/kakao';
 import { cn } from '@/lib/utils';
 import type { StationInfo, NearbyStationInfo, BusLaneInfo, BusStationInfo, RealtimeArrivalInfo } from '@/lib/odsay/types';
 import { createClient } from '@/lib/supabase/client';
+import { useSearchStore, RecentStation, RecentRoute } from '@/lib/store';
 import { BusSidebar } from '@/components/bus/BusSidebar';
 import { BusRouteDetail } from '@/components/bus/BusRouteDetail';
 import { BusStationList } from '@/components/bus/BusStationList';
@@ -128,7 +129,18 @@ function BusPageContent() {
   const [loadingTracking, setLoadingTracking] = useState(false);
   const [stationTrackingBusIds, setStationTrackingBusIds] = useState<string[]>([]);
 
-  const [searchHistory, setSearchHistory] = useState<SearchHistoryItem[]>([]);
+  // Zustand store에서 검색 이력 관리
+  const {
+    recentStations,
+    recentRoutes,
+    addRecentStation,
+    addRecentRoute,
+    removeRecentStation,
+    removeRecentRoute,
+    clearRecentStations,
+    clearRecentRoutes,
+  } = useSearchStore();
+
   const [favoriteStations, setFavoriteStations] = useState<FavoriteStation[]>([]);
   const [favoriteRoutes, setFavoriteRoutes] = useState<FavoriteRoute[]>([]);
   const [user, setUser] = useState<{ id: string } | null>(null);
@@ -147,15 +159,45 @@ function BusPageContent() {
       }
     });
 
-    const saved = localStorage.getItem('bus_search_history');
-    if (saved) {
-      try {
-        setSearchHistory(JSON.parse(saved));
-      } catch {
-        setSearchHistory([]);
+    // 기존 bus_search_history 데이터 마이그레이션 (한 번만 실행)
+    const migrated = localStorage.getItem('bus_search_history_migrated');
+    if (!migrated) {
+      const saved = localStorage.getItem('bus_search_history');
+      if (saved) {
+        try {
+          const oldHistory: SearchHistoryItem[] = JSON.parse(saved);
+          // 정류소와 노선을 분리하여 Zustand store에 추가
+          oldHistory.forEach((item) => {
+            if (item.type === 'station') {
+              addRecentStation({
+                stationId: item.id,
+                stationName: item.name,
+                arsId: item.arsID,
+                x: item.x,
+                y: item.y,
+              });
+            } else if (item.type === 'bus') {
+              addRecentRoute({
+                busId: item.id,
+                busNo: item.name,
+                busType: item.busType,
+                subInfo: item.subInfo,
+              });
+            }
+          });
+          // 마이그레이션 완료 표시
+          localStorage.setItem('bus_search_history_migrated', 'true');
+          // 기존 데이터 삭제
+          localStorage.removeItem('bus_search_history');
+        } catch {
+          // 마이그레이션 실패 시에도 표시하여 반복 방지
+          localStorage.setItem('bus_search_history_migrated', 'true');
+        }
+      } else {
+        localStorage.setItem('bus_search_history_migrated', 'true');
       }
     }
-  }, []);
+  }, [addRecentStation, addRecentRoute]);
 
   const fetchFavorites = async () => {
     try {
@@ -177,14 +219,6 @@ function BusPageContent() {
     }
   };
 
-  const addToHistory = useCallback((item: Omit<SearchHistoryItem, 'timestamp'>) => {
-    setSearchHistory((prev) => {
-      const filtered = prev.filter((h) => !(h.type === item.type && h.id === item.id));
-      const newHistory = [{ ...item, timestamp: Date.now() }, ...filtered].slice(0, 20);
-      localStorage.setItem('bus_search_history', JSON.stringify(newHistory));
-      return newHistory;
-    });
-  }, []);
 
   useEffect(() => {
     async function initMap() {
@@ -629,14 +663,14 @@ function BusPageContent() {
     setSelectedBus(null);
     setBusRouteStations([]);
     setActiveTab('station');
-    
-    addToHistory({
-      type: 'station',
-      id: station.stationID,
-      name: station.stationName,
+
+    // Zustand store에 검색 이력 저장
+    addRecentStation({
+      stationId: station.stationID,
+      stationName: station.stationName,
+      arsId: stationInfo.arsID,
       x: station.x,
       y: station.y,
-      arsID: stationInfo.arsID,
     });
 
     if (mapInstanceRef.current) {
@@ -653,13 +687,13 @@ function BusPageContent() {
     setSelectedStation(null);
     setStationArrivals([]);
     setActiveTab('route');
-    
-    addToHistory({
-      type: 'bus',
-      id: bus.busID,
-      name: bus.busNo,
-      subInfo: bus.busStartPoint && bus.busEndPoint ? `${bus.busStartPoint} → ${bus.busEndPoint}` : undefined,
+
+    // Zustand store에 검색 이력 저장
+    addRecentRoute({
+      busId: bus.busID,
+      busNo: bus.busNo,
       busType: bus.type,
+      subInfo: bus.busStartPoint && bus.busEndPoint ? `${bus.busStartPoint} → ${bus.busEndPoint}` : undefined,
     });
 
     fetchBusRoute(bus);
@@ -960,46 +994,38 @@ function BusPageContent() {
             onRefresh={() => fetchNearbyStations()}
           />
           {/* 최근 검색 - 정류소 */}
-          {searchHistory.filter(h => h.type === 'station').length > 0 && (
+          {recentStations.length > 0 && (
             <div className="mt-4 pt-4 border-t border-border">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium text-muted-foreground">최근 검색</span>
                 <button
-                  onClick={() => {
-                    const newHistory = searchHistory.filter(h => h.type !== 'station');
-                    setSearchHistory(newHistory);
-                    localStorage.setItem('bus_search_history', JSON.stringify(newHistory));
-                  }}
+                  onClick={clearRecentStations}
                   className="text-xs text-muted-foreground hover:text-foreground"
                 >
                   전체 삭제
                 </button>
               </div>
               <div className="space-y-1">
-                {searchHistory.filter(h => h.type === 'station').slice(0, 5).map((item) => (
+                {recentStations.slice(0, 5).map((station) => (
                   <div
-                    key={`${item.type}-${item.id}`}
+                    key={`station-${station.stationId}`}
                     className="flex items-center gap-2 p-2 rounded-lg hover:bg-accent/50 group"
                   >
                     <button
                       onClick={() => handleSelectStation({
-                        stationID: item.id,
-                        stationName: item.name,
-                        x: item.x || '',
-                        y: item.y || '',
+                        stationID: station.stationId,
+                        stationName: station.stationName,
+                        x: station.x || '',
+                        y: station.y || '',
                         CID: 1,
-                        arsID: item.arsID,
+                        arsID: station.arsId,
                       })}
                       className="flex-1 text-left text-sm truncate"
                     >
-                      {item.name}
+                      {station.stationName}
                     </button>
                     <button
-                      onClick={() => {
-                        const newHistory = searchHistory.filter(h => !(h.type === item.type && h.id === item.id));
-                        setSearchHistory(newHistory);
-                        localStorage.setItem('bus_search_history', JSON.stringify(newHistory));
-                      }}
+                      onClick={() => removeRecentStation(station.stationId)}
                       className="p-1 rounded hover:bg-accent opacity-0 group-hover:opacity-100 transition-opacity"
                     >
                       <span className="text-muted-foreground text-xs">✕</span>
@@ -1013,48 +1039,40 @@ function BusPageContent() {
       )}
 
       {/* 최근 검색 - 노선 (버스 미선택 시) */}
-      {!selectedBus && activeTab === 'route' && searchHistory.filter(h => h.type === 'bus').length > 0 && (
+      {!selectedBus && activeTab === 'route' && recentRoutes.length > 0 && (
         <div className="mt-4 pt-4 border-t border-border">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-muted-foreground">최근 검색</span>
             <button
-              onClick={() => {
-                const newHistory = searchHistory.filter(h => h.type !== 'bus');
-                setSearchHistory(newHistory);
-                localStorage.setItem('bus_search_history', JSON.stringify(newHistory));
-              }}
+              onClick={clearRecentRoutes}
               className="text-xs text-muted-foreground hover:text-foreground"
             >
               전체 삭제
             </button>
           </div>
           <div className="space-y-1">
-            {searchHistory.filter(h => h.type === 'bus').slice(0, 10).map((item) => (
+            {recentRoutes.slice(0, 10).map((route) => (
               <div
-                key={`${item.type}-${item.id}`}
+                key={`route-${route.busId}`}
                 className="flex items-center gap-2 p-2 rounded-lg hover:bg-accent/50 group"
               >
                 <button
                   onClick={() => handleSelectBus({
-                    busID: item.id,
-                    busNo: item.name,
-                    type: item.busType ?? 0,
-                    busStartPoint: item.subInfo?.split(' → ')[0] || '',
-                    busEndPoint: item.subInfo?.split(' → ')[1] || '',
+                    busID: route.busId,
+                    busNo: route.busNo,
+                    type: route.busType ?? 0,
+                    busStartPoint: route.subInfo?.split(' → ')[0] || '',
+                    busEndPoint: route.subInfo?.split(' → ')[1] || '',
                   } as BusLaneInfo)}
                   className="flex-1 text-left min-w-0"
                 >
-                  <span className="text-sm font-medium">{item.name}</span>
-                  {item.subInfo && (
-                    <p className="text-xs text-muted-foreground truncate">{item.subInfo}</p>
+                  <span className="text-sm font-medium">{route.busNo}</span>
+                  {route.subInfo && (
+                    <p className="text-xs text-muted-foreground truncate">{route.subInfo}</p>
                   )}
                 </button>
                 <button
-                  onClick={() => {
-                    const newHistory = searchHistory.filter(h => !(h.type === item.type && h.id === item.id));
-                    setSearchHistory(newHistory);
-                    localStorage.setItem('bus_search_history', JSON.stringify(newHistory));
-                  }}
+                  onClick={() => removeRecentRoute(route.busId)}
                   className="p-1 rounded hover:bg-accent opacity-0 group-hover:opacity-100 transition-opacity"
                 >
                   <span className="text-muted-foreground text-xs">✕</span>
@@ -1273,38 +1291,31 @@ function BusPageContent() {
                 arsID: station.arsID,
               });
             }}
-            searchHistory={searchHistory}
-            onHistorySelect={(item) => {
-              if (item.type === 'station') {
-                handleSelectStation({
-                  stationID: item.id,
-                  stationName: item.name,
-                  x: item.x || '',
-                  y: item.y || '',
-                  CID: 1,
-                  arsID: item.arsID,
-                });
-              } else {
-                handleSelectBus({
-                  busID: item.id,
-                  busNo: item.name,
-                  type: item.busType ?? 0,
-                  busStartPoint: item.subInfo?.split(' → ')[0] || '',
-                  busEndPoint: item.subInfo?.split(' → ')[1] || '',
-                } as BusLaneInfo);
-              }
-            }}
-            onRemoveHistoryItem={(type, id) => {
-              setSearchHistory(prev => {
-                const newHistory = prev.filter(h => !(h.type === type && h.id === id));
-                localStorage.setItem('bus_search_history', JSON.stringify(newHistory));
-                return newHistory;
+            recentStations={recentStations}
+            recentRoutes={recentRoutes}
+            onRecentStationSelect={(station) => {
+              handleSelectStation({
+                stationID: station.stationId,
+                stationName: station.stationName,
+                x: station.x || '',
+                y: station.y || '',
+                CID: 1,
+                arsID: station.arsId,
               });
             }}
-            onClearHistory={() => {
-              setSearchHistory([]);
-              localStorage.removeItem('bus_search_history');
+            onRecentRouteSelect={(route) => {
+              handleSelectBus({
+                busID: route.busId,
+                busNo: route.busNo,
+                type: route.busType ?? 0,
+                busStartPoint: route.subInfo?.split(' → ')[0] || '',
+                busEndPoint: route.subInfo?.split(' → ')[1] || '',
+              } as BusLaneInfo);
             }}
+            onRemoveRecentStation={removeRecentStation}
+            onRemoveRecentRoute={removeRecentRoute}
+            onClearRecentStations={clearRecentStations}
+            onClearRecentRoutes={clearRecentRoutes}
             favoriteStations={favoriteStations}
             favoriteRoutes={favoriteRoutes}
             onFavoriteStationSelect={(station) => {
@@ -1405,18 +1416,31 @@ function BusPageContent() {
             fetchNearbyStations(mapCenter || currentLocation || undefined, radius);
           }}
           onRefreshNearby={() => fetchNearbyStations()}
-          searchHistory={searchHistory}
-          onClearHistory={() => {
-            setSearchHistory([]);
-            localStorage.removeItem('bus_search_history');
-          }}
-          onRemoveHistoryItem={(type, id) => {
-            setSearchHistory(prev => {
-              const newHistory = prev.filter(h => !(h.type === type && h.id === id));
-              localStorage.setItem('bus_search_history', JSON.stringify(newHistory));
-              return newHistory;
+          recentStations={recentStations}
+          recentRoutes={recentRoutes}
+          onRecentStationSelect={(station) => {
+            handleSelectStation({
+              stationID: station.stationId,
+              stationName: station.stationName,
+              x: station.x || '',
+              y: station.y || '',
+              CID: 1,
+              arsID: station.arsId,
             });
           }}
+          onRecentRouteSelect={(route) => {
+            handleSelectBus({
+              busID: route.busId,
+              busNo: route.busNo,
+              type: route.busType ?? 0,
+              busStartPoint: route.subInfo?.split(' → ')[0] || '',
+              busEndPoint: route.subInfo?.split(' → ')[1] || '',
+            } as BusLaneInfo);
+          }}
+          onRemoveRecentStation={removeRecentStation}
+          onRemoveRecentRoute={removeRecentRoute}
+          onClearRecentStations={clearRecentStations}
+          onClearRecentRoutes={clearRecentRoutes}
           trackingTargets={trackingTargets}
           loadingTracking={loadingTracking}
           onRemoveTracking={async (id) => {

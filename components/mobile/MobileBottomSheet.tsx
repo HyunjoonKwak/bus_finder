@@ -1,25 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Search, MapPin, Bus, ChevronUp, ChevronDown, RefreshCw, Clock, X, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import type { NearbyStation } from '@/components/station/NearbyStations';
+import type { RecentStation, RecentRoute } from '@/lib/store';
 
 type SearchMode = 'station' | 'bus' | 'favorites';
 type SheetState = 'collapsed' | 'half' | 'expanded';
-
-interface SearchHistoryItem {
-  type: 'station' | 'bus';
-  id: string;
-  name: string;
-  subInfo?: string;
-  x?: string;
-  y?: string;
-  arsID?: string;
-  busType?: number;
-  timestamp: number;
-}
 
 interface FavoriteStation {
   id: string;
@@ -48,11 +37,15 @@ interface MobileBottomSheetProps {
   onRadiusChange: (radius: number) => void;
   onRefreshNearby: () => void;
   onStationSelect: (station: NearbyStation) => void;
-  // History
-  searchHistory: SearchHistoryItem[];
-  onHistorySelect: (item: SearchHistoryItem) => void;
-  onRemoveHistoryItem: (type: string, id: string) => void;
-  onClearHistory: () => void;
+  // Recent history (Zustand store)
+  recentStations: RecentStation[];
+  recentRoutes: RecentRoute[];
+  onRecentStationSelect: (station: RecentStation) => void;
+  onRecentRouteSelect: (route: RecentRoute) => void;
+  onRemoveRecentStation: (stationId: string) => void;
+  onRemoveRecentRoute: (busId: string) => void;
+  onClearRecentStations: () => void;
+  onClearRecentRoutes: () => void;
   // Favorites
   favoriteStations?: FavoriteStation[];
   favoriteRoutes?: FavoriteRoute[];
@@ -73,10 +66,14 @@ export function MobileBottomSheet({
   onRadiusChange,
   onRefreshNearby,
   onStationSelect,
-  searchHistory,
-  onHistorySelect,
-  onRemoveHistoryItem,
-  onClearHistory,
+  recentStations,
+  recentRoutes,
+  onRecentStationSelect,
+  onRecentRouteSelect,
+  onRemoveRecentStation,
+  onRemoveRecentRoute,
+  onClearRecentStations,
+  onClearRecentRoutes,
   favoriteStations = [],
   favoriteRoutes = [],
   onFavoriteStationSelect,
@@ -98,15 +95,9 @@ export function MobileBottomSheet({
     setSheetState(prev => prev === 'collapsed' ? 'half' : 'collapsed');
   };
 
-  const filteredHistory = searchHistory.filter(h =>
-    mode === 'station' ? h.type === 'station' :
-    mode === 'bus' ? h.type === 'bus' : true
-  ).slice(0, 5);
-
-  // Reset to collapsed when mode changes
-  useEffect(() => {
-    setSheetState('collapsed');
-  }, [mode]);
+  // 모드에 따라 최근 검색 데이터 선택
+  const currentRecentStations = recentStations.slice(0, 5);
+  const currentRecentRoutes = recentRoutes.slice(0, 5);
 
   const sheetHeight = sheetState === 'collapsed'
     ? 'max-h-[140px]'
@@ -261,7 +252,8 @@ export function MobileBottomSheet({
             )}
 
             {/* History section - for both station and bus modes */}
-            {(mode === 'station' || mode === 'bus') && filteredHistory.length > 0 && (
+            {/* 최근 검색 - 정류소 모드 */}
+            {mode === 'station' && currentRecentStations.length > 0 && (
               <div className="pt-2 border-t border-border">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
@@ -269,36 +261,72 @@ export function MobileBottomSheet({
                     <span className="font-medium text-sm">최근 검색</span>
                   </div>
                   <button
-                    onClick={onClearHistory}
+                    onClick={onClearRecentStations}
                     className="text-xs text-muted-foreground hover:text-foreground"
                   >
                     전체 삭제
                   </button>
                 </div>
                 <div className="space-y-1">
-                  {filteredHistory.map((item) => (
+                  {currentRecentStations.map((station) => (
                     <div
-                      key={`${item.type}-${item.id}`}
+                      key={`station-${station.stationId}`}
                       className="flex items-center gap-2 p-2 rounded-lg hover:bg-accent/50"
                     >
                       <button
-                        onClick={() => onHistorySelect(item)}
+                        onClick={() => onRecentStationSelect(station)}
                         className="flex-1 flex items-center gap-2 text-left min-w-0"
                       >
-                        {item.type === 'station' ? (
-                          <MapPin className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                        ) : (
-                          <Bus className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                        )}
+                        <MapPin className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                        <span className="text-sm truncate block">{station.stationName}</span>
+                      </button>
+                      <button
+                        onClick={() => onRemoveRecentStation(station.stationId)}
+                        className="p-1.5 rounded hover:bg-accent flex-shrink-0"
+                      >
+                        <X className="w-3.5 h-3.5 text-muted-foreground" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 최근 검색 - 버스 모드 */}
+            {mode === 'bus' && currentRecentRoutes.length > 0 && (
+              <div className="pt-2 border-t border-border">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-muted-foreground" />
+                    <span className="font-medium text-sm">최근 검색</span>
+                  </div>
+                  <button
+                    onClick={onClearRecentRoutes}
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    전체 삭제
+                  </button>
+                </div>
+                <div className="space-y-1">
+                  {currentRecentRoutes.map((route) => (
+                    <div
+                      key={`route-${route.busId}`}
+                      className="flex items-center gap-2 p-2 rounded-lg hover:bg-accent/50"
+                    >
+                      <button
+                        onClick={() => onRecentRouteSelect(route)}
+                        className="flex-1 flex items-center gap-2 text-left min-w-0"
+                      >
+                        <Bus className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                         <div className="min-w-0">
-                          <span className="text-sm truncate block">{item.name}</span>
-                          {item.subInfo && (
-                            <span className="text-xs text-muted-foreground truncate block">{item.subInfo}</span>
+                          <span className="text-sm truncate block">{route.busNo}</span>
+                          {route.subInfo && (
+                            <span className="text-xs text-muted-foreground truncate block">{route.subInfo}</span>
                           )}
                         </div>
                       </button>
                       <button
-                        onClick={() => onRemoveHistoryItem(item.type, item.id)}
+                        onClick={() => onRemoveRecentRoute(route.busId)}
                         className="p-1.5 rounded hover:bg-accent flex-shrink-0"
                       >
                         <X className="w-3.5 h-3.5 text-muted-foreground" />

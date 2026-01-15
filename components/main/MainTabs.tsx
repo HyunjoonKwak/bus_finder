@@ -7,7 +7,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
-import { MyPlace } from '@/lib/store';
+import { MyPlace, useSearchStore } from '@/lib/store';
 import { getCurrentPosition } from '@/lib/kakao';
 
 type TabType = 'favorites' | 'station' | 'route' | 'search';
@@ -55,6 +55,9 @@ export function MainTabs({ className }: MainTabsProps) {
   const [activeTab, setActiveTab] = useState<TabType>('favorites');
   const [user, setUser] = useState<{ id: string } | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Zustand store에서 최근 검색 이력 가져오기
+  const { recentStations, recentRoutes } = useSearchStore();
 
   // 즐겨찾기 상태
   const [favoriteStations, setFavoriteStations] = useState<FavoriteStation[]>([]);
@@ -335,8 +338,29 @@ export function MainTabs({ className }: MainTabsProps) {
                   </div>
                 )}
 
+                {/* 최근 검색 정류소 */}
+                {recentStations.length > 0 && (
+                  <div>
+                    <h3 className="text-xs font-medium text-muted-foreground mb-2">최근 검색</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      {recentStations.slice(0, 6).map((station) => (
+                        <Card
+                          key={station.stationId}
+                          className="p-2.5 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer select-none touch-manipulation"
+                          onClick={() => router.push(`/station/${station.stationId}?name=${encodeURIComponent(station.stationName)}${station.arsId ? `&arsId=${station.arsId}` : ''}`)}
+                        >
+                          <p className="text-sm font-medium truncate">{station.stationName}</p>
+                          {station.arsId && (
+                            <p className="text-xs text-muted-foreground">{station.arsId}</p>
+                          )}
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* 비로그인 안내 */}
-                {!user && (
+                {!user && favoriteStations.length === 0 && recentStations.length === 0 && (
                   <Card className="p-3 border-border/50 bg-muted/30">
                     <p className="text-xs text-muted-foreground text-center">
                       로그인하면 즐겨찾기 정류소를 볼 수 있어요
@@ -371,6 +395,24 @@ export function MainTabs({ className }: MainTabsProps) {
                           onClick={() => router.push(`/bus/${route.bus_id}?no=${encodeURIComponent(route.bus_no)}`)}
                         >
                           <span className="font-bold text-sm text-primary">{route.bus_no}</span>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 최근 검색 노선 */}
+                {recentRoutes.length > 0 && (
+                  <div>
+                    <h3 className="text-xs font-medium text-muted-foreground mb-2">최근 검색</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {recentRoutes.slice(0, 8).map((route) => (
+                        <Card
+                          key={route.busId}
+                          className="px-3 py-1.5 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer select-none touch-manipulation"
+                          onClick={() => router.push(`/bus/${route.busId}?no=${encodeURIComponent(route.busNo)}`)}
+                        >
+                          <span className="font-bold text-sm">{route.busNo}</span>
                         </Card>
                       ))}
                     </div>

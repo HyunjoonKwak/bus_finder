@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { createClient } from '@/lib/supabase/client';
+import { useSearchStore } from '@/lib/store';
 
 const REFRESH_INTERVAL = 15; // 15초마다 새로고침
 
@@ -39,6 +40,7 @@ export default function BusDetailPage() {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
+  const { addRecentRoute } = useSearchStore();
   const busId = params.id as string;
   const busNo = searchParams.get('no') || '버스';
 
@@ -92,6 +94,12 @@ export default function BusDetailPage() {
       if (user) {
         checkFavorite(user.id);
       }
+    });
+
+    // 최근 검색 이력에 저장
+    addRecentRoute({
+      busId,
+      busNo,
     });
 
     fetchBusDetail();
