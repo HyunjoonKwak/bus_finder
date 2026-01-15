@@ -132,10 +132,10 @@ logs() {
 
     if [ -z "$service" ]; then
         print_header "📝 전체 로그"
-        GHCR_USERNAME=${GHCR_USERNAME} IMAGE_TAG=${IMAGE_TAG} docker-compose -f ${COMPOSE_FILE} logs -f --tail=100
+        GHCR_USERNAME=${GHCR_USERNAME} IMAGE_TAG=${IMAGE_TAG} docker-compose -f ${COMPOSE_FILE} logs -tf --tail=100
     else
         print_header "📝 $service 로그"
-        GHCR_USERNAME=${GHCR_USERNAME} IMAGE_TAG=${IMAGE_TAG} docker-compose -f ${COMPOSE_FILE} logs -f --tail=100 "$service"
+        GHCR_USERNAME=${GHCR_USERNAME} IMAGE_TAG=${IMAGE_TAG} docker-compose -f ${COMPOSE_FILE} logs -tf --tail=100 "$service"
     fi
 }
 
