@@ -43,6 +43,20 @@ interface SearchResult {
   type: 'place' | 'station' | 'route';
 }
 
+interface FavoriteStation {
+  stationId: string;
+  stationName: string;
+  arsId?: string;
+}
+
+interface FavoriteRoute {
+  busId: string;
+  busNo: string;
+  routeType?: string;
+  startStationName?: string;
+  endStationName?: string;
+}
+
 export default function SearchUnifiedPage() {
   const router = useRouter();
   const { recentSearches, removeRecentSearch, clearSearches } = useSearchStore();
@@ -52,6 +66,8 @@ export default function SearchUnifiedPage() {
   const [user, setUser] = useState<{ id: string } | null>(null);
   const [myPlaces, setMyPlaces] = useState<MyPlace[]>([]);
   const [routeHistory, setRouteHistory] = useState<RouteHistoryItem[]>([]);
+  const [favoriteStations, setFavoriteStations] = useState<FavoriteStation[]>([]);
+  const [favoriteRoutes, setFavoriteRoutes] = useState<FavoriteRoute[]>([]);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -62,9 +78,25 @@ export default function SearchUnifiedPage() {
       if (user) {
         fetchMyPlaces();
         fetchRouteHistory();
+        fetchFavorites();
       }
     });
   }, []);
+
+  const fetchFavorites = async () => {
+    try {
+      const [stationsRes, routesRes] = await Promise.all([
+        fetch('/api/favorites/stations'),
+        fetch('/api/favorites/routes'),
+      ]);
+      const stationsData = await stationsRes.json();
+      const routesData = await routesRes.json();
+      setFavoriteStations(stationsData.favorites || []);
+      setFavoriteRoutes(routesData.favorites || []);
+    } catch (error) {
+      console.error('Fetch favorites error:', error);
+    }
+  };
 
   const fetchRouteHistory = async () => {
     try {
@@ -226,6 +258,14 @@ export default function SearchUnifiedPage() {
     router.push(url);
   };
 
+  const handleFavoriteStationClick = (station: FavoriteStation) => {
+    router.push(`/station/${station.stationId}?name=${encodeURIComponent(station.stationName)}`);
+  };
+
+  const handleFavoriteRouteClick = (route: FavoriteRoute) => {
+    router.push(`/bus/${route.busId}?no=${encodeURIComponent(route.busNo)}`);
+  };
+
   const formatTimeAgo = (dateString: string) => {
     const now = new Date();
     const date = new Date(dateString);
@@ -361,45 +401,27 @@ export default function SearchUnifiedPage() {
           </div>
         )}
 
-        {/* 최근 탭 */}
+        {/* 최근 탭 - 모든 항목 통합 표시 */}
         {activeTab === 'recent' && !query && (
           <div className="space-y-4">
-            {/* 최근 길찾기 */}
-            {recentSearches.length > 0 && (
+            {/* 내 장소 */}
+            {myPlaces.length > 0 && (
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-xs font-medium text-muted-foreground">최근 길찾기</h3>
-                  <button onClick={clearSearches} className="text-xs text-muted-foreground hover:text-foreground">
-                    전체 삭제
-                  </button>
-                </div>
+                <h3 className="text-xs font-medium text-muted-foreground mb-2">내 장소</h3>
                 <div className="space-y-1">
-                  {recentSearches.slice(0, 10).map((search, index) => (
+                  {myPlaces.slice(0, 3).map((place) => (
                     <Card
-                      key={index}
+                      key={`place-${place.id}`}
                       className="p-3 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer"
-                      onClick={() => handleRecentSearch(search)}
+                      onClick={() => handleMyPlaceClick(place)}
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <span className="text-lg">🗺️</span>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm truncate">
-                              {search.origin} → {search.destination}
-                            </p>
-                          </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xl">{getPlaceIcon(place.icon)}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm">{place.name}</p>
+                          <p className="text-xs text-muted-foreground truncate">{place.placeName}</p>
                         </div>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeRecentSearch(index);
-                          }}
-                          className="p-1 text-muted-foreground hover:text-foreground"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
+                        <span className="text-xs text-primary">길찾기</span>
                       </div>
                     </Card>
                   ))}
@@ -407,9 +429,92 @@ export default function SearchUnifiedPage() {
               </div>
             )}
 
-            {recentSearches.length === 0 && (
+            {/* 즐겨찾기 정류소 */}
+            {favoriteStations.length > 0 && (
+              <div>
+                <h3 className="text-xs font-medium text-muted-foreground mb-2">즐겨찾기 정류소</h3>
+                <div className="space-y-1">
+                  {favoriteStations.slice(0, 3).map((station) => (
+                    <Card
+                      key={`station-${station.stationId}`}
+                      className="p-3 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer"
+                      onClick={() => handleFavoriteStationClick(station)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-xl">🚏</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm">{station.stationName}</p>
+                          {station.arsId && (
+                            <p className="text-xs text-muted-foreground">{station.arsId}</p>
+                          )}
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 즐겨찾기 노선 */}
+            {favoriteRoutes.length > 0 && (
+              <div>
+                <h3 className="text-xs font-medium text-muted-foreground mb-2">즐겨찾기 노선</h3>
+                <div className="space-y-1">
+                  {favoriteRoutes.slice(0, 3).map((route) => (
+                    <Card
+                      key={`route-${route.busId}`}
+                      className="p-3 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer"
+                      onClick={() => handleFavoriteRouteClick(route)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-xl">🚌</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm">{route.busNo}</p>
+                          {route.startStationName && route.endStationName && (
+                            <p className="text-xs text-muted-foreground truncate">
+                              {route.startStationName} → {route.endStationName}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 최근 길찾기 이력 (DB) */}
+            {routeHistory.length > 0 && (
+              <div>
+                <h3 className="text-xs font-medium text-muted-foreground mb-2">최근 길찾기</h3>
+                <div className="space-y-1">
+                  {routeHistory.slice(0, 5).map((history) => (
+                    <Card
+                      key={`history-${history.id}`}
+                      className="p-3 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer"
+                      onClick={() => handleRouteHistoryClick(history)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-xl">🗺️</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{history.origin_name}</p>
+                          <p className="text-xs text-muted-foreground truncate">→ {history.dest_name}</p>
+                        </div>
+                        <span className="text-[10px] text-muted-foreground">
+                          {formatTimeAgo(history.created_at)}
+                        </span>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 아무 데이터도 없을 때 */}
+            {myPlaces.length === 0 && favoriteStations.length === 0 && favoriteRoutes.length === 0 && routeHistory.length === 0 && (
               <div className="py-8 text-center">
-                <p className="text-sm text-muted-foreground">최근 검색 기록이 없습니다</p>
+                <p className="text-sm text-muted-foreground">최근 기록이 없습니다</p>
+                <p className="text-xs text-muted-foreground/70 mt-1">장소, 정류소, 노선을 검색하거나 즐겨찾기해보세요</p>
               </div>
             )}
           </div>
@@ -467,10 +572,81 @@ export default function SearchUnifiedPage() {
           </div>
         )}
 
-        {/* 대중교통 탭 (검색어 없을 때) */}
+        {/* 대중교통 탭 (검색어 없을 때 즐겨찾기 표시) */}
         {activeTab === 'transit' && !query && (
-          <div className="py-8 text-center">
-            <p className="text-sm text-muted-foreground">정류소, 노선, 장소를 검색해보세요</p>
+          <div className="space-y-4">
+            {!user ? (
+              <div className="py-8 text-center">
+                <p className="text-sm text-muted-foreground mb-2">로그인하면 즐겨찾기를 저장할 수 있어요</p>
+                <button
+                  onClick={() => router.push('/login')}
+                  className="text-sm text-primary hover:underline"
+                >
+                  로그인하기
+                </button>
+              </div>
+            ) : favoriteStations.length === 0 && favoriteRoutes.length === 0 ? (
+              <div className="py-8 text-center">
+                <p className="text-sm text-muted-foreground">즐겨찾기한 정류소나 노선이 없습니다</p>
+                <p className="text-xs text-muted-foreground/70 mt-1">정류소나 노선 검색 후 즐겨찾기해보세요</p>
+              </div>
+            ) : (
+              <>
+                {/* 즐겨찾기 정류소 */}
+                {favoriteStations.length > 0 && (
+                  <div>
+                    <h3 className="text-xs font-medium text-muted-foreground mb-2">즐겨찾기 정류소</h3>
+                    <div className="space-y-1">
+                      {favoriteStations.map((station) => (
+                        <Card
+                          key={station.stationId}
+                          className="p-3 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer"
+                          onClick={() => handleFavoriteStationClick(station)}
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="text-xl">🚏</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-sm">{station.stationName}</p>
+                              {station.arsId && (
+                                <p className="text-xs text-muted-foreground">{station.arsId}</p>
+                              )}
+                            </div>
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 즐겨찾기 노선 */}
+                {favoriteRoutes.length > 0 && (
+                  <div>
+                    <h3 className="text-xs font-medium text-muted-foreground mb-2">즐겨찾기 노선</h3>
+                    <div className="space-y-1">
+                      {favoriteRoutes.map((route) => (
+                        <Card
+                          key={route.busId}
+                          className="p-3 border-border/50 hover:bg-accent/50 transition-colors cursor-pointer"
+                          onClick={() => handleFavoriteRouteClick(route)}
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="text-xl">🚌</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-sm">{route.busNo}</p>
+                              {route.startStationName && route.endStationName && (
+                                <p className="text-xs text-muted-foreground truncate">
+                                  {route.startStationName} → {route.endStationName}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )}
 
