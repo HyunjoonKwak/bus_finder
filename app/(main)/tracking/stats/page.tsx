@@ -49,9 +49,9 @@ function StatsContent() {
   const router = useRouter();
   const [stats, setStats] = useState<Stats | null>(null);
   const [pagination, setPagination] = useState<Pagination | null>(null);
-  const [allLogs, setAllLogs] = useState<ArrivalLog[]>([]);
+  const [currentLogs, setCurrentLogs] = useState<ArrivalLog[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
+  const [logsLoading, setLogsLoading] = useState(false);
   const [days, setDays] = useState(30);
   const [editMode, setEditMode] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -66,17 +66,16 @@ function StatsContent() {
   useEffect(() => {
     if (busId && stationId) {
       setCurrentPage(1);
-      setAllLogs([]);
       fetchStats(1, true);
     }
   }, [busId, stationId, days]);
 
-  const fetchStats = async (page: number = 1, reset: boolean = false) => {
+  const fetchStats = async (page: number = 1, isInitial: boolean = false) => {
     try {
-      if (reset) {
+      if (isInitial) {
         setLoading(true);
       } else {
-        setLoadingMore(true);
+        setLogsLoading(true);
       }
 
       const response = await fetch(
@@ -85,24 +84,19 @@ function StatsContent() {
       const data = await response.json();
       setStats(data.stats);
       setPagination(data.pagination);
-
-      if (reset) {
-        setAllLogs(data.stats.recentLogs);
-      } else {
-        setAllLogs(prev => [...prev, ...data.stats.recentLogs]);
-      }
+      setCurrentLogs(data.stats.recentLogs);
       setCurrentPage(page);
     } catch (error) {
       console.error('Fetch stats error:', error);
     } finally {
       setLoading(false);
-      setLoadingMore(false);
+      setLogsLoading(false);
     }
   };
 
-  const loadMore = () => {
-    if (pagination?.hasMore && !loadingMore) {
-      fetchStats(currentPage + 1, false);
+  const goToPage = (page: number) => {
+    if (page >= 1 && page <= (pagination?.totalPages || 1) && !logsLoading) {
+      fetchStats(page, false);
     }
   };
 
@@ -116,10 +110,8 @@ function StatsContent() {
       });
 
       if (response.ok) {
-        // 삭제된 항목 로컬에서 제거
-        setAllLogs(prev => prev.filter(log => log.id !== logId));
-        // 통계 다시 불러오기 (페이지 1부터)
-        await fetchStats(1, true);
+        // 현재 페이지 다시 불러오기
+        await fetchStats(currentPage, false);
       } else {
         const data = await response.json();
         alert(`삭제 실패: ${data.error}`);
@@ -130,6 +122,35 @@ function StatsContent() {
     } finally {
       setDeletingId(null);
     }
+  };
+
+  // 페이지네이션에 표시할 페이지 번호 계산
+  const getPageNumbers = () => {
+    if (!pagination) return [];
+    const { totalPages } = pagination;
+    const pages: (number | string)[] = [];
+    const maxVisible = 5;
+
+    if (totalPages <= maxVisible) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      if (currentPage <= 3) {
+        for (let i = 1; i <= 4; i++) pages.push(i);
+        pages.push('...');
+        pages.push(totalPages);
+      } else if (currentPage >= totalPages - 2) {
+        pages.push(1);
+        pages.push('...');
+        for (let i = totalPages - 3; i <= totalPages; i++) pages.push(i);
+      } else {
+        pages.push(1);
+        pages.push('...');
+        for (let i = currentPage - 1; i <= currentPage + 1; i++) pages.push(i);
+        pages.push('...');
+        pages.push(totalPages);
+      }
+    }
+    return pages;
   };
 
   if (!busId || !stationId) {
@@ -311,10 +332,10 @@ function StatsContent() {
           <Card className="p-4">
             <div className="flex items-center justify-between mb-3">
               <div>
-                <h2 className="font-semibold text-foreground">최근 도착 기록</h2>
+                <h2 className="font-semibold text-foreground">도착 기록</h2>
                 {pagination && (
                   <p className="text-xs text-muted-foreground">
-                    {allLogs.length} / {pagination.totalLogs}건
+                    {pagination.totalLogs}건 중 {(currentPage - 1) * logsPerPage + 1}-{Math.min(currentPage * logsPerPage, pagination.totalLogs)}
                   </p>
                 )}
               </div>
@@ -329,9 +350,8 @@ function StatsContent() {
                 {editMode ? '완료' : '편집'}
               </button>
             </div>
-            <div className="max-h-80 overflow-y-auto">
-              <div className="space-y-2">
-                {allLogs.map((log) => {
+            <div className="space-y-2">
+              {currentLogs.map((log) => {
                   const date = new Date(log.arrival_time);
                   const isDeleting = deletingId === log.id;
                   return (
@@ -381,30 +401,54 @@ function StatsContent() {
                     </div>
                   );
                 })}
-              </div>
             </div>
-            {allLogs.length === 0 && (
+            {currentLogs.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-4">
                 기록이 없습니다.
               </p>
             )}
-            {pagination?.hasMore && (
+            {/* 페이지네이션 */}
+            {pagination && pagination.totalPages > 1 && (
               <div className="mt-4 pt-4 border-t border-border">
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={loadMore}
-                  disabled={loadingMore}
-                >
-                  {loadingMore ? (
-                    <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                      불러오는 중...
-                    </div>
-                  ) : (
-                    `더보기 (${pagination.totalLogs - allLogs.length}건 남음)`
-                  )}
-                </Button>
+                <div className="flex items-center justify-center gap-1">
+                  <button
+                    onClick={() => goToPage(currentPage - 1)}
+                    disabled={currentPage === 1 || logsLoading}
+                    className="px-3 py-1.5 text-sm rounded border border-border hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    이전
+                  </button>
+                  {getPageNumbers().map((pageNum, idx) => (
+                    typeof pageNum === 'number' ? (
+                      <button
+                        key={idx}
+                        onClick={() => goToPage(pageNum)}
+                        disabled={logsLoading}
+                        className={`w-8 h-8 text-sm rounded ${
+                          pageNum === currentPage
+                            ? 'bg-primary text-primary-foreground'
+                            : 'border border-border hover:bg-muted'
+                        } disabled:opacity-50`}
+                      >
+                        {pageNum}
+                      </button>
+                    ) : (
+                      <span key={idx} className="px-1 text-muted-foreground">...</span>
+                    )
+                  ))}
+                  <button
+                    onClick={() => goToPage(currentPage + 1)}
+                    disabled={currentPage === pagination.totalPages || logsLoading}
+                    className="px-3 py-1.5 text-sm rounded border border-border hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    다음
+                  </button>
+                </div>
+                {logsLoading && (
+                  <div className="flex justify-center mt-2">
+                    <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  </div>
+                )}
               </div>
             )}
           </Card>
