@@ -26,6 +26,11 @@ interface HourStats {
   count: number;
 }
 
+// UTC를 KST(UTC+9)로 변환
+function toKST(date: Date): Date {
+  return new Date(date.getTime() + 9 * 60 * 60 * 1000);
+}
+
 // GET: 버스 도착 통계 조회
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -42,6 +47,8 @@ export async function GET(request: NextRequest) {
   const bus_id = searchParams.get('bus_id');
   const station_id = searchParams.get('station_id');
   const days = parseInt(searchParams.get('days') || '30', 10);
+  const page = parseInt(searchParams.get('page') || '1', 10);
+  const limit = parseInt(searchParams.get('limit') || '20', 10);
 
   if (!bus_id || !station_id) {
     return ApiErrors.badRequest('버스 ID와 정류소 ID가 필요합니다.');
@@ -83,13 +90,10 @@ export async function GET(request: NextRequest) {
 
   typedLogs.forEach((log) => {
     const date = new Date(log.arrival_time);
+    const kstDate = toKST(date);
     const dayOfWeek = log.day_of_week;
-    const hour = date.getHours();
-    const timeStr = date.toLocaleTimeString('ko-KR', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    });
+    const hour = kstDate.getUTCHours(); // KST로 변환된 시간의 시간대
+    const timeStr = `${kstDate.getUTCHours().toString().padStart(2, '0')}:${kstDate.getUTCMinutes().toString().padStart(2, '0')}`;
 
     byDay[dayOfWeek].count++;
     byDay[dayOfWeek].times.push(timeStr);
@@ -118,8 +122,8 @@ export async function GET(request: NextRequest) {
 
   if (typedLogs.length > 0) {
     const times = typedLogs.map((log) => {
-      const d = new Date(log.arrival_time);
-      return d.getHours() * 60 + d.getMinutes();
+      const d = toKST(new Date(log.arrival_time));
+      return d.getUTCHours() * 60 + d.getUTCMinutes();
     });
     const minTime = Math.min(...times);
     const maxTime = Math.max(...times);
@@ -162,8 +166,12 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // 최근 도착 기록 (최대 10개)
-  const recentLogs = typedLogs.slice(-10).reverse();
+  // 최근 도착 기록 (페이지네이션 지원)
+  const sortedLogs = [...typedLogs].reverse(); // 최신순 정렬
+  const totalLogs = sortedLogs.length;
+  const totalPages = Math.ceil(totalLogs / limit);
+  const startIndex = (page - 1) * limit;
+  const recentLogs = sortedLogs.slice(startIndex, startIndex + limit);
 
   return successResponse({
     stats: {
@@ -175,6 +183,13 @@ export async function GET(request: NextRequest) {
       byHour,
       recentLogs,
       period: `최근 ${days}일`,
+    },
+    pagination: {
+      page,
+      limit,
+      totalLogs,
+      totalPages,
+      hasMore: page < totalPages,
     },
   });
 }

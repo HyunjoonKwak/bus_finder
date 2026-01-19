@@ -36,14 +36,27 @@ interface Stats {
   period: string;
 }
 
+interface Pagination {
+  page: number;
+  limit: number;
+  totalLogs: number;
+  totalPages: number;
+  hasMore: boolean;
+}
+
 function StatsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [stats, setStats] = useState<Stats | null>(null);
+  const [pagination, setPagination] = useState<Pagination | null>(null);
+  const [allLogs, setAllLogs] = useState<ArrivalLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [days, setDays] = useState(30);
   const [editMode, setEditMode] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const logsPerPage = 20;
 
   const busId = searchParams.get('bus_id');
   const stationId = searchParams.get('station_id');
@@ -52,21 +65,44 @@ function StatsContent() {
 
   useEffect(() => {
     if (busId && stationId) {
-      fetchStats();
+      setCurrentPage(1);
+      setAllLogs([]);
+      fetchStats(1, true);
     }
   }, [busId, stationId, days]);
 
-  const fetchStats = async () => {
+  const fetchStats = async (page: number = 1, reset: boolean = false) => {
     try {
+      if (reset) {
+        setLoading(true);
+      } else {
+        setLoadingMore(true);
+      }
+
       const response = await fetch(
-        `/api/tracking/stats?bus_id=${busId}&station_id=${stationId}&days=${days}`
+        `/api/tracking/stats?bus_id=${busId}&station_id=${stationId}&days=${days}&page=${page}&limit=${logsPerPage}`
       );
       const data = await response.json();
       setStats(data.stats);
+      setPagination(data.pagination);
+
+      if (reset) {
+        setAllLogs(data.stats.recentLogs);
+      } else {
+        setAllLogs(prev => [...prev, ...data.stats.recentLogs]);
+      }
+      setCurrentPage(page);
     } catch (error) {
       console.error('Fetch stats error:', error);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
+    }
+  };
+
+  const loadMore = () => {
+    if (pagination?.hasMore && !loadingMore) {
+      fetchStats(currentPage + 1, false);
     }
   };
 
@@ -80,8 +116,10 @@ function StatsContent() {
       });
 
       if (response.ok) {
-        // 통계 다시 불러오기
-        await fetchStats();
+        // 삭제된 항목 로컬에서 제거
+        setAllLogs(prev => prev.filter(log => log.id !== logId));
+        // 통계 다시 불러오기 (페이지 1부터)
+        await fetchStats(1, true);
       } else {
         const data = await response.json();
         alert(`삭제 실패: ${data.error}`);
@@ -272,7 +310,14 @@ function StatsContent() {
           {/* 최근 기록 */}
           <Card className="p-4">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="font-semibold text-foreground">최근 도착 기록</h2>
+              <div>
+                <h2 className="font-semibold text-foreground">최근 도착 기록</h2>
+                {pagination && (
+                  <p className="text-xs text-muted-foreground">
+                    {allLogs.length} / {pagination.totalLogs}건
+                  </p>
+                )}
+              </div>
               <button
                 onClick={() => setEditMode(!editMode)}
                 className={`text-sm px-2 py-1 rounded transition-colors ${
@@ -284,62 +329,83 @@ function StatsContent() {
                 {editMode ? '완료' : '편집'}
               </button>
             </div>
-            <div className="space-y-2">
-              {stats.recentLogs.map((log) => {
-                const date = new Date(log.arrival_time);
-                const isDeleting = deletingId === log.id;
-                return (
-                  <div
-                    key={log.id}
-                    className="flex items-center justify-between py-2 border-b border-border last:border-0"
-                  >
-                    <div className="flex items-center gap-2">
-                      {editMode && (
-                        <button
-                          onClick={() => handleDeleteLog(log.id)}
-                          disabled={isDeleting}
-                          className="p-1 text-destructive hover:bg-destructive/10 rounded transition-colors disabled:opacity-50"
-                          title="삭제"
-                        >
-                          {isDeleting ? (
-                            <div className="w-4 h-4 border-2 border-destructive border-t-transparent rounded-full animate-spin" />
-                          ) : (
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          )}
-                        </button>
-                      )}
-                      <span className="text-sm text-muted-foreground">
-                        {date.toLocaleDateString('ko-KR', {
-                          month: 'short',
-                          day: 'numeric',
-                          weekday: 'short',
-                        })}
-                      </span>
-                    </div>
-                    <div className="text-right">
-                      <span className="font-semibold text-primary">
-                        {date.toLocaleTimeString('ko-KR', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                          hour12: false,
-                        })}
-                      </span>
-                      {log.plate_no && (
-                        <span className="ml-2 text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                          {log.plate_no}
+            <div className="max-h-80 overflow-y-auto">
+              <div className="space-y-2">
+                {allLogs.map((log) => {
+                  const date = new Date(log.arrival_time);
+                  const isDeleting = deletingId === log.id;
+                  return (
+                    <div
+                      key={log.id}
+                      className="flex items-center justify-between py-2 border-b border-border last:border-0"
+                    >
+                      <div className="flex items-center gap-2">
+                        {editMode && (
+                          <button
+                            onClick={() => handleDeleteLog(log.id)}
+                            disabled={isDeleting}
+                            className="p-1 text-destructive hover:bg-destructive/10 rounded transition-colors disabled:opacity-50"
+                            title="삭제"
+                          >
+                            {isDeleting ? (
+                              <div className="w-4 h-4 border-2 border-destructive border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            )}
+                          </button>
+                        )}
+                        <span className="text-sm text-muted-foreground">
+                          {date.toLocaleDateString('ko-KR', {
+                            month: 'short',
+                            day: 'numeric',
+                            weekday: 'short',
+                          })}
                         </span>
-                      )}
+                      </div>
+                      <div className="text-right">
+                        <span className="font-semibold text-primary">
+                          {date.toLocaleTimeString('ko-KR', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: false,
+                          })}
+                        </span>
+                        {log.plate_no && (
+                          <span className="ml-2 text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                            {log.plate_no}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
-            {stats.recentLogs.length === 0 && (
+            {allLogs.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-4">
                 기록이 없습니다.
               </p>
+            )}
+            {pagination?.hasMore && (
+              <div className="mt-4 pt-4 border-t border-border">
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                >
+                  {loadingMore ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                      불러오는 중...
+                    </div>
+                  ) : (
+                    `더보기 (${pagination.totalLogs - allLogs.length}건 남음)`
+                  )}
+                </Button>
+              </div>
             )}
           </Card>
         </div>

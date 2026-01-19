@@ -49,6 +49,17 @@ class DynamicTimerManager {
 
     // 도착 정보 없으면 타이머 해제 상태로 유지
     if (arrivalSec === null || arrivalSec === undefined) {
+      // 이전에 imminent 상태(3분 이내)였으면 도착으로 처리
+      if (existingTimer?.lastArrivalSec !== null &&
+          existingTimer?.lastArrivalSec !== undefined &&
+          existingTimer.lastArrivalSec <= IMMINENT_THRESHOLD) {
+        const plateNoForLog = existingTimer.lastPlateNo;
+        this.logArrival(target, new Date(), plateNoForLog).catch(err => {
+          console.error(`[Timer] 도착 기록 저장 실패:`, err);
+        });
+        console.log(`[Timer] ${target.bus_no}@${target.station_name}: 도착 감지 (메인스캔-정보없음) [${plateNoForLog || '번호없음'}]`);
+      }
+
       this.timers.set(target.id, {
         targetId: target.id,
         target,
