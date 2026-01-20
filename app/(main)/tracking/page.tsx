@@ -322,8 +322,30 @@ export default function TrackingPage() {
     return (
       <div className="px-4 py-4">
         <h1 className="text-xl font-bold text-foreground mb-4">버스 도착 추적</h1>
-        <div className="flex justify-center py-16" role="status" aria-label="로딩 중">
-          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+        {/* 스켈레톤 로딩 UI */}
+        <div className="space-y-3 md:grid md:grid-cols-2 md:gap-3 md:space-y-0" role="status" aria-label="로딩 중">
+          {[1, 2, 3].map((i) => (
+            <Card key={i} className="p-4 animate-pulse">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <div className="h-6 w-12 bg-muted rounded" />
+                    <div className="h-5 w-14 bg-muted rounded-full" />
+                  </div>
+                  <div className="h-4 w-32 bg-muted rounded mt-2" />
+                </div>
+                <div className="flex gap-1">
+                  <div className="h-9 w-9 bg-muted rounded" />
+                  <div className="h-9 w-9 bg-muted rounded" />
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-16 bg-muted rounded" />
+                <div className="h-4 w-20 bg-muted rounded" />
+              </div>
+            </Card>
+          ))}
+          <span className="sr-only">추적 대상 목록을 불러오는 중...</span>
         </div>
       </div>
     );
@@ -516,7 +538,7 @@ export default function TrackingPage() {
           <Button onClick={() => router.push('/station/search')}>정류소 검색</Button>
         </div>
       ) : (
-        <div className="space-y-3" role="list" aria-label="추적 대상 버스 목록">
+        <div className="space-y-3 md:grid md:grid-cols-2 md:gap-3 md:space-y-0" role="list" aria-label="추적 대상 버스 목록">
           {targets.map((target) => {
             const arrivalStatus = target.arrival ? getArrivalStatus(target.arrival.arrivalSec) : null;
 
