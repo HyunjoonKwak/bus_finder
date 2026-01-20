@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import type { MyPlaceDB, PlaceIcon } from '@/types/my-place';
 import { PLACE_ICONS } from '@/types/my-place';
+import { useDebounce } from '@/lib/hooks';
 
 interface Place {
   id: string;
@@ -53,8 +54,8 @@ export function PlaceSearchInput({
   const [isFocused, setIsFocused] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const debounceRef = useRef<NodeJS.Timeout>(undefined);
   const justSelectedRef = useRef(false);
+  const debouncedValue = useDebounce(value, 300);
 
   // 내 장소 불러오기
   useEffect(() => {
@@ -93,26 +94,14 @@ export function PlaceSearchInput({
     }
   }, []);
 
+  // 디바운스된 검색어로 검색 실행
   useEffect(() => {
     if (justSelectedRef.current) {
       justSelectedRef.current = false;
       return;
     }
-
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-    }
-
-    debounceRef.current = setTimeout(() => {
-      fetchSuggestions(value);
-    }, 300);
-
-    return () => {
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-      }
-    };
-  }, [value, fetchSuggestions]);
+    fetchSuggestions(debouncedValue);
+  }, [debouncedValue, fetchSuggestions]);
 
   // 포커스/검색어에 따라 드롭다운 열기
   useEffect(() => {

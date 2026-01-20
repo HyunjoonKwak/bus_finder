@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import type { BusLaneInfo } from '@/lib/odsay/types';
 import { BUS_TYPE_MAP } from '@/lib/odsay/types';
+import { useDebounce } from '@/lib/hooks';
 
 interface BusSearchInputProps {
   onSelect: (bus: BusLaneInfo) => void;
@@ -18,46 +19,39 @@ export function BusSearchInput({
   className,
 }: BusSearchInputProps) {
   const [query, setQuery] = useState('');
+  const debouncedQuery = useDebounce(query, 300);
   const [results, setResults] = useState<BusLaneInfo[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const debounceRef = useRef<NodeJS.Timeout>(undefined);
 
-  useEffect(() => {
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-    }
-
-    if (query.length < 1) {
+  const fetchBuses = useCallback(async (searchQuery: string) => {
+    if (searchQuery.length < 1) {
       setResults([]);
       setIsOpen(false);
       return;
     }
 
-    debounceRef.current = setTimeout(async () => {
-      setLoading(true);
-      try {
-        const response = await fetch(
-          `/api/bus/search?q=${encodeURIComponent(query)}`
-        );
-        const data = await response.json();
-        setResults(data.buses || []);
-        setIsOpen(true);
-      } catch (error) {
-        console.error('Search error:', error);
-        setResults([]);
-      } finally {
-        setLoading(false);
-      }
-    }, 300);
+    setLoading(true);
+    try {
+      const response = await fetch(
+        `/api/bus/search?q=${encodeURIComponent(searchQuery)}`
+      );
+      const data = await response.json();
+      setResults(data.buses || []);
+      setIsOpen(true);
+    } catch (error) {
+      console.error('Search error:', error);
+      setResults([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-    return () => {
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-      }
-    };
-  }, [query]);
+  // 디바운스된 검색어로 검색 실행
+  useEffect(() => {
+    fetchBuses(debouncedQuery);
+  }, [debouncedQuery, fetchBuses]);
 
   const handleSelect = (bus: BusLaneInfo) => {
     setQuery(bus.busNo);

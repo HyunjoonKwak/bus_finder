@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import type { StationInfo } from '@/lib/odsay/types';
+import { useDebounce } from '@/lib/hooks';
 
 interface StationSearchInputProps {
   onSelect: (station: StationInfo) => void;
@@ -17,47 +18,40 @@ export function StationSearchInput({
   className,
 }: StationSearchInputProps) {
   const [query, setQuery] = useState('');
+  const debouncedQuery = useDebounce(query, 300);
   const [results, setResults] = useState<StationInfo[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const debounceRef = useRef<NodeJS.Timeout>(undefined);
 
-  useEffect(() => {
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-    }
-
-    if (query.length < 2) {
+  const fetchStations = useCallback(async (searchQuery: string) => {
+    if (searchQuery.length < 2) {
       setResults([]);
       setIsOpen(false);
       return;
     }
 
-    debounceRef.current = setTimeout(async () => {
-      setLoading(true);
-      try {
-        // 공공데이터포털 API 사용
-        const response = await fetch(
-          `/api/bus/station/search?q=${encodeURIComponent(query)}`
-        );
-        const data = await response.json();
-        setResults(data.stations || []);
-        setIsOpen(true);
-      } catch (error) {
-        console.error('Search error:', error);
-        setResults([]);
-      } finally {
-        setLoading(false);
-      }
-    }, 300);
+    setLoading(true);
+    try {
+      // 공공데이터포털 API 사용
+      const response = await fetch(
+        `/api/bus/station/search?q=${encodeURIComponent(searchQuery)}`
+      );
+      const data = await response.json();
+      setResults(data.stations || []);
+      setIsOpen(true);
+    } catch (error) {
+      console.error('Search error:', error);
+      setResults([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-    return () => {
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-      }
-    };
-  }, [query]);
+  // 디바운스된 검색어로 검색 실행
+  useEffect(() => {
+    fetchStations(debouncedQuery);
+  }, [debouncedQuery, fetchStations]);
 
   const handleSelect = (station: StationInfo) => {
     setQuery(station.stationName);
