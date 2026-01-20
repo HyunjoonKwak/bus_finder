@@ -3,7 +3,7 @@ import { getBusArrival } from '@/lib/publicdata/bus-arrival';
 import { timerManager } from './dynamic-timer';
 
 const ARRIVAL_IMMINENT_THRESHOLD = 180; // 3분 이내면 "곧 도착" 상태
-const DUPLICATE_PREVENTION_TIME = 3 * 60 * 1000; // 3분 내 중복 기록 방지
+const DUPLICATE_PREVENTION_TIME = 5 * 60 * 1000; // 5분 내 중복 기록 방지 (3분→5분 확대)
 
 interface TrackingTarget {
   id: string;
@@ -294,6 +294,10 @@ async function handleArrivalDetection(
 
   // Case 1: 3분 이내 도착 예정
   if (arrivalSec !== null && arrivalSec <= ARRIVAL_IMMINENT_THRESHOLD) {
+    // plate_no 수집 최적화: 새 값이 없으면 기존 값 유지 (버스가 가까워질수록 plate_no 제공 확률 증가)
+    const existingPlateNo = (pending as PendingArrival & { plate_no?: string })?.plate_no || null;
+    const finalPlateNo = plateNo || existingPlateNo;
+
     // pending에 추가/업데이트
     await supabase
       .from('pending_arrivals')
@@ -303,14 +307,16 @@ async function handleArrivalDetection(
         station_name: target.station_name,
         ars_id: target.ars_id,
         arrival_sec: arrivalSec,
-        plate_no: plateNo,
+        plate_no: finalPlateNo,
         updated_at: now.toISOString(),
       }, {
         onConflict: 'user_id,bus_id,station_id',
       });
 
     if (!pending) {
-      console.log(`[Cron] ${target.bus_no}: 곧 도착 상태 시작 (${arrivalSec}초) [${plateNo || '번호없음'}]`);
+      console.log(`[Cron] ${target.bus_no}: 곧 도착 상태 시작 (${arrivalSec}초) [${finalPlateNo || '번호없음'}]`);
+    } else if (!existingPlateNo && finalPlateNo) {
+      console.log(`[Cron] ${target.bus_no}: plate_no 수집 성공 [${finalPlateNo}]`);
     }
     return false;
   }
@@ -326,20 +332,34 @@ async function handleArrivalDetection(
 
     console.log(`[Cron] ${target.bus_no}: pending 상태에서 변경 감지 (이전: ${pendingData.arrival_sec}초, 현재: ${arrivalSec === null ? '정보없음' : arrivalSec + '초'})`);
 
-    // 중복 방지: 최근 3분 내 동일 버스/정류소 기록이 있는지 확인
+    // 중복 방지: 최근 5분 내 동일 버스/정류소 기록이 있는지 확인
     const recentCutoff = new Date(now.getTime() - DUPLICATE_PREVENTION_TIME);
     const { data: recentLogs } = await supabase
       .from('bus_arrival_logs')
-      .select('id')
+      .select('id, plate_no')
       .eq('user_id', target.user_id)
       .eq('bus_id', target.bus_id)
       .eq('station_id', target.station_id)
       .gte('arrival_time', recentCutoff.toISOString())
-      .limit(1);
+      .limit(5);
 
+    const pendingPlateNoForCheck = (pendingData as PendingArrival & { plate_no?: string }).plate_no || null;
+
+    // 1차: plate_no 기반 중복 체크 (더 정확함)
+    if (pendingPlateNoForCheck && recentLogs?.some(log => log.plate_no === pendingPlateNoForCheck)) {
+      console.log(`[Cron] ${target.bus_no}: 동일 차량번호(${pendingPlateNoForCheck}) 중복 - 스킵`);
+      await supabase
+        .from('pending_arrivals')
+        .delete()
+        .eq('user_id', target.user_id)
+        .eq('bus_id', target.bus_id)
+        .eq('station_id', target.station_id);
+      return false;
+    }
+
+    // 2차: 시간 기반 중복 체크 (plate_no 없을 때 fallback)
     if (recentLogs && recentLogs.length > 0) {
-      console.log(`[Cron] ${target.bus_no}: 3분 내 중복 기록 방지 - 스킵`);
-      // pending 삭제만 하고 기록은 안 함
+      console.log(`[Cron] ${target.bus_no}: 5분 내 중복 기록 방지 - 스킵`);
       await supabase
         .from('pending_arrivals')
         .delete()

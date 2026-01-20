@@ -87,13 +87,16 @@ export interface MatchedArrival {
   arrivalAtA: string;
   arrivalAtB: string;
   travelTimeMinutes: number;
+  confidence?: 'high' | 'medium' | 'low';  // 매칭 신뢰도
+  confidenceReason?: string;                // 신뢰도 사유
+  isMidnightCrossing?: boolean;             // 자정 전후 매칭 여부
 }
 
 // 분석 이슈 케이스
 export interface AnalysisIssue {
-  type: 'duplicate' | 'unmatched' | 'no_plate' | 'timeout' | 'boundary' | 'diff_day';
+  type: 'duplicate' | 'unmatched' | 'no_plate' | 'timeout' | 'boundary' | 'diff_day' | 'config_warning' | 'midnight_match';
   description: string;
-  station: 'A' | 'B';
+  station: 'A' | 'B' | 'system';
   plateNo?: string | null;
   arrivalTime: string;
   details?: string;
@@ -131,5 +134,20 @@ export interface PairAnalysis {
     timeout: number;         // 시간 초과 (6시간 이상) - deprecated
     boundary: number;        // 첫차/막차 (분석 제외)
     diffDay: number;         // 다른 날 매칭 시도
+    configWarning: number;   // 설정 경고 (추적 미설정 등)
+    midnightMatch: number;   // 자정 전후 매칭 성공
+  };
+
+  // 추적 상태 정보
+  trackingStatus?: {
+    isATracked: boolean;
+    isBTracked: boolean;
+  };
+
+  // 매칭 신뢰도 통계
+  confidenceStats?: {
+    high: number;
+    medium: number;
+    low: number;
   };
 }

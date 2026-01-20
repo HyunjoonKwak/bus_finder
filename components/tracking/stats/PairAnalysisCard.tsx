@@ -117,6 +117,30 @@ export function PairAnalysisCard({ pair, days, onDelete }: PairAnalysisCardProps
       ``,
     ];
 
+    // 추적 상태
+    if (analysis.trackingStatus) {
+      lines.push(`## 추적 상태`);
+      lines.push(``);
+      lines.push(`| 정류장 | 추적 상태 |`);
+      lines.push(`|--------|----------|`);
+      lines.push(`| A (${analysis.stationA}) | ${analysis.trackingStatus.isATracked ? '✅ 활성' : '❌ 비활성'} |`);
+      lines.push(`| B (${analysis.stationB}) | ${analysis.trackingStatus.isBTracked ? '✅ 활성' : '❌ 비활성'} |`);
+      lines.push(``);
+    }
+
+    // 매칭 신뢰도 통계
+    if (analysis.confidenceStats && analysis.matchedCount > 0) {
+      lines.push(`## 매칭 신뢰도`);
+      lines.push(``);
+      lines.push(`| 신뢰도 | 건수 | 비율 |`);
+      lines.push(`|--------|------|------|`);
+      const total = analysis.matchedCount;
+      lines.push(`| 높음 (정상) | ${analysis.confidenceStats.high}건 | ${Math.round(analysis.confidenceStats.high / total * 100)}% |`);
+      lines.push(`| 중간 (경계) | ${analysis.confidenceStats.medium}건 | ${Math.round(analysis.confidenceStats.medium / total * 100)}% |`);
+      lines.push(`| 낮음 (자정) | ${analysis.confidenceStats.low}건 | ${Math.round(analysis.confidenceStats.low / total * 100)}% |`);
+      lines.push(``);
+    }
+
     // 이슈 요약
     if (analysis.issuesSummary) {
       lines.push(`## 분석 이슈 요약`);
@@ -126,7 +150,14 @@ export function PairAnalysisCard({ pair, days, onDelete }: PairAnalysisCardProps
       lines.push(`| 중복 기록 | ${analysis.issuesSummary.duplicates}건 |`);
       lines.push(`| 매칭 실패 | ${analysis.issuesSummary.unmatched}건 |`);
       lines.push(`| 번호판 없음 | ${analysis.issuesSummary.noPlateNo}건 |`);
-      lines.push(`| 시간 초과 | ${analysis.issuesSummary.timeout}건 |`);
+      lines.push(`| 첫차/막차 (경계) | ${analysis.issuesSummary.boundary}건 |`);
+      lines.push(`| 시간 초과 | ${analysis.issuesSummary.diffDay}건 |`);
+      if (analysis.issuesSummary.midnightMatch) {
+        lines.push(`| 자정 매칭 성공 | ${analysis.issuesSummary.midnightMatch}건 |`);
+      }
+      if (analysis.issuesSummary.configWarning) {
+        lines.push(`| 설정 경고 | ${analysis.issuesSummary.configWarning}건 |`);
+      }
       lines.push(``);
     }
 
@@ -134,8 +165,8 @@ export function PairAnalysisCard({ pair, days, onDelete }: PairAnalysisCardProps
     if (analysis.recentMatches.length > 0) {
       lines.push(`## 최근 매칭 기록`);
       lines.push(``);
-      lines.push(`| 날짜 | A 도착 | B 도착 | 소요시간 | 차량번호 |`);
-      lines.push(`|------|--------|--------|----------|----------|`);
+      lines.push(`| 날짜 | A 도착 | B 도착 | 소요시간 | 차량번호 | 신뢰도 |`);
+      lines.push(`|------|--------|--------|----------|----------|--------|`);
 
       for (const match of analysis.recentMatches) {
         const dateA = new Date(match.arrivalAtA);
@@ -143,8 +174,10 @@ export function PairAnalysisCard({ pair, days, onDelete }: PairAnalysisCardProps
         const dateStr = dateA.toLocaleDateString('ko-KR');
         const timeA = dateA.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
         const timeB = dateB.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+        const confidence = match.confidence === 'high' ? '✅ 높음' : match.confidence === 'medium' ? '⚠️ 중간' : '❌ 낮음';
+        const midnightFlag = match.isMidnightCrossing ? ' 🌙' : '';
 
-        lines.push(`| ${dateStr} | ${timeA} | ${timeB} | ${match.travelTimeMinutes}분 | ${match.plateNo} |`);
+        lines.push(`| ${dateStr} | ${timeA} | ${timeB} | ${match.travelTimeMinutes}분 | ${match.plateNo} | ${confidence}${midnightFlag} |`);
       }
       lines.push(``);
     }
@@ -276,6 +309,24 @@ export function PairAnalysisCard({ pair, days, onDelete }: PairAnalysisCardProps
         </div>
       </div>
 
+      {/* 추적 상태 경고 */}
+      {analysis.trackingStatus && (!analysis.trackingStatus.isATracked || !analysis.trackingStatus.isBTracked) && (
+        <div className="mb-3 p-2 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+          <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+            <span>⚠️</span>
+            <span>
+              {!analysis.trackingStatus.isATracked && !analysis.trackingStatus.isBTracked
+                ? 'A, B 정류장 모두 추적 미설정'
+                : !analysis.trackingStatus.isATracked
+                  ? 'A 정류장 추적 미설정'
+                  : 'B 정류장 추적 미설정'
+              }
+              {' - 양쪽 정류장을 모두 추적해야 매칭률이 높아집니다.'}
+            </span>
+          </p>
+        </div>
+      )}
+
       {/* 소요시간 통계 */}
       <div className="grid grid-cols-2 gap-3 mb-3">
         <div className="bg-primary/10 rounded-lg p-3">
@@ -351,13 +402,24 @@ export function PairAnalysisCard({ pair, days, onDelete }: PairAnalysisCardProps
                   const timeA = dateA.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
                   const dateStr = dateA.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
 
+                  // 신뢰도에 따른 색상
+                  const confidenceColor = match.confidence === 'high'
+                    ? 'bg-green-500/10 border-green-500/20'
+                    : match.confidence === 'medium'
+                      ? 'bg-yellow-500/10 border-yellow-500/20'
+                      : 'bg-red-500/10 border-red-500/20';
+
                   return (
                     <div
                       key={i}
-                      className="flex items-center justify-between text-xs bg-muted/30 rounded px-2 py-1"
+                      className={`flex items-center justify-between text-xs rounded px-2 py-1 border ${confidenceColor}`}
+                      title={match.confidenceReason || '정상 매칭'}
                     >
                       <span className="text-muted-foreground">{dateStr}</span>
-                      <span>{timeA} → +{match.travelTimeMinutes}분</span>
+                      <span className="flex items-center gap-1">
+                        {timeA} → +{match.travelTimeMinutes}분
+                        {match.isMidnightCrossing && <span title="자정 전후 매칭">🌙</span>}
+                      </span>
                       <span className="text-muted-foreground font-mono text-[10px]">
                         {match.plateNo.slice(-4)}
                       </span>
@@ -372,6 +434,31 @@ export function PairAnalysisCard({ pair, days, onDelete }: PairAnalysisCardProps
             <p className="text-xs text-muted-foreground text-center py-2">
               매칭된 기록이 없습니다. 차량번호(plate_no) 데이터가 필요합니다.
             </p>
+          )}
+
+          {/* 매칭 신뢰도 통계 */}
+          {analysis.confidenceStats && analysis.matchedCount > 0 && (
+            <div className="mt-3 pt-3 border-t border-border">
+              <p className="text-xs font-medium text-muted-foreground mb-2">🎯 매칭 신뢰도</p>
+              <div className="flex gap-2 text-xs">
+                <div className="flex items-center gap-1 px-2 py-1 bg-green-500/10 rounded">
+                  <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                  <span>높음: {analysis.confidenceStats.high}건</span>
+                </div>
+                {analysis.confidenceStats.medium > 0 && (
+                  <div className="flex items-center gap-1 px-2 py-1 bg-yellow-500/10 rounded">
+                    <span className="w-2 h-2 bg-yellow-500 rounded-full"></span>
+                    <span>중간: {analysis.confidenceStats.medium}건</span>
+                  </div>
+                )}
+                {analysis.confidenceStats.low > 0 && (
+                  <div className="flex items-center gap-1 px-2 py-1 bg-red-500/10 rounded">
+                    <span className="w-2 h-2 bg-red-500 rounded-full"></span>
+                    <span>낮음: {analysis.confidenceStats.low}건</span>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
 
           {/* 분석 이슈 요약 */}
@@ -406,7 +493,19 @@ export function PairAnalysisCard({ pair, days, onDelete }: PairAnalysisCardProps
                 {analysis.issuesSummary.diffDay > 0 && (
                   <div className="flex items-center gap-1.5 text-purple-600 dark:text-purple-400">
                     <span>📅</span>
-                    <span>다른 날: {analysis.issuesSummary.diffDay}건</span>
+                    <span>시간 초과: {analysis.issuesSummary.diffDay}건</span>
+                  </div>
+                )}
+                {analysis.issuesSummary.midnightMatch && analysis.issuesSummary.midnightMatch > 0 && (
+                  <div className="flex items-center gap-1.5 text-green-600 dark:text-green-400">
+                    <span>🌙</span>
+                    <span>자정 매칭: {analysis.issuesSummary.midnightMatch}건</span>
+                  </div>
+                )}
+                {analysis.issuesSummary.configWarning && analysis.issuesSummary.configWarning > 0 && (
+                  <div className="flex items-center gap-1.5 text-orange-600 dark:text-orange-400">
+                    <span>⚙️</span>
+                    <span>설정 경고: {analysis.issuesSummary.configWarning}건</span>
                   </div>
                 )}
               </div>
