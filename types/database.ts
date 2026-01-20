@@ -377,6 +377,50 @@ export interface Database {
           updated_at?: string;
         };
       };
+      station_pairs: {
+        Row: {
+          id: string;
+          user_id: string;
+          bus_id: string;
+          bus_no: string;
+          station_a_id: string;
+          station_a_name: string;
+          station_a_ars_id: string | null;
+          station_b_id: string;
+          station_b_name: string;
+          station_b_ars_id: string | null;
+          name: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          bus_id: string;
+          bus_no: string;
+          station_a_id: string;
+          station_a_name: string;
+          station_a_ars_id?: string | null;
+          station_b_id: string;
+          station_b_name: string;
+          station_b_ars_id?: string | null;
+          name?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          bus_id?: string;
+          bus_no?: string;
+          station_a_id?: string;
+          station_a_name?: string;
+          station_a_ars_id?: string | null;
+          station_b_id?: string;
+          station_b_name?: string;
+          station_b_ars_id?: string | null;
+          name?: string | null;
+          created_at?: string;
+        };
+      };
     };
   };
 }

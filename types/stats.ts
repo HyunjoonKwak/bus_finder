@@ -61,3 +61,54 @@ export interface StatsApiResponse {
   stats: Stats;
   pagination: Pagination;
 }
+
+// 페어 정류장 관련 타입
+export interface StationPair {
+  id: string;
+  userId: string;
+  busId: string;
+  busNo: string;
+  stationA: {
+    id: string;
+    name: string;
+    arsId?: string | null;
+  };
+  stationB: {
+    id: string;
+    name: string;
+    arsId?: string | null;
+  };
+  name?: string | null;
+  createdAt: string;
+}
+
+export interface MatchedArrival {
+  plateNo: string;
+  arrivalAtA: string;
+  arrivalAtB: string;
+  travelTimeMinutes: number;
+}
+
+export interface PairAnalysis {
+  pairId: string;
+  busNo: string;
+  stationA: string;
+  stationB: string;
+  period: string;
+
+  // 소요시간 통계
+  avgTravelTime: number | null;      // 평균 소요시간 (분)
+  minTravelTime: number | null;      // 최소 소요시간
+  maxTravelTime: number | null;      // 최대 소요시간
+  stdDevTravelTime: number | null;   // 표준편차
+
+  // 매칭/누락 통계
+  totalArrivalsAtA: number;          // A 정류장 총 도착 수
+  totalArrivalsAtB: number;          // B 정류장 총 도착 수
+  matchedCount: number;              // plate_no로 매칭된 수
+  missingAtB: number;                // A에서 출발 후 B 도착 없음
+  matchRate: number;                 // 매칭률 (%)
+
+  // 최근 매칭 기록
+  recentMatches: MatchedArrival[];
+}
