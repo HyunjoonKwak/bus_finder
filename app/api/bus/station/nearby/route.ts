@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { searchNearbyStations } from '@/lib/publicdata/bus-station';
+import { ApiErrors, successResponse } from '@/lib/api-response';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -8,10 +9,7 @@ export async function GET(request: NextRequest) {
   const radius = searchParams.get('radius') || '500';
 
   if (!x || !y) {
-    return NextResponse.json(
-      { error: '위치 정보가 필요합니다.' },
-      { status: 400 }
-    );
+    return ApiErrors.badRequest('위치 정보가 필요합니다.');
   }
 
   try {
@@ -31,12 +29,9 @@ export async function GET(request: NextRequest) {
       distance: s.distance || 0,
     }));
 
-    return NextResponse.json({ stations: formattedStations });
+    return successResponse({ stations: formattedStations });
   } catch (error) {
     console.error('Nearby stations error:', error);
-    return NextResponse.json(
-      { error: '주변 정류소 검색에 실패했습니다.' },
-      { status: 500 }
-    );
+    return ApiErrors.internalError('주변 정류소 검색에 실패했습니다.');
   }
 }

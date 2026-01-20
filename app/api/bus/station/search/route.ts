@@ -1,15 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { searchStation } from '@/lib/publicdata/bus-station';
+import { ApiErrors, successResponse } from '@/lib/api-response';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const query = searchParams.get('q');
 
   if (!query) {
-    return NextResponse.json(
-      { error: '검색어를 입력해주세요.' },
-      { status: 400 }
-    );
+    return ApiErrors.badRequest('검색어를 입력해주세요.');
   }
 
   try {
@@ -25,12 +23,9 @@ export async function GET(request: NextRequest) {
       CID: 1,
     }));
 
-    return NextResponse.json({ stations: formattedStations });
+    return successResponse({ stations: formattedStations });
   } catch (error) {
     console.error('Station search error:', error);
-    return NextResponse.json(
-      { error: '정류소 검색에 실패했습니다.' },
-      { status: 500 }
-    );
+    return ApiErrors.internalError('정류소 검색에 실패했습니다.');
   }
 }

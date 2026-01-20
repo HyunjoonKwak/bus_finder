@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getBusRouteDetail } from '@/lib/publicdata/bus-route';
 import { getBusLaneDetail } from '@/lib/odsay';
+import { ApiErrors, successResponse } from '@/lib/api-response';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -8,10 +9,7 @@ export async function GET(request: NextRequest) {
   const busNo = searchParams.get('busNo') || '';
 
   if (!routeId && !busNo) {
-    return NextResponse.json(
-      { error: '노선 ID 또는 버스 번호가 필요합니다.' },
-      { status: 400 }
-    );
+    return ApiErrors.badRequest('노선 ID 또는 버스 번호가 필요합니다.');
   }
 
   try {
@@ -25,7 +23,7 @@ export async function GET(request: NextRequest) {
       const totalStations = stations.length;
       const midPoint = Math.ceil(totalStations / 2);
 
-      return NextResponse.json({
+      return successResponse({
         routeInfo: routeInfo ? {
           routeId: routeInfo.routeId,
           routeName: routeInfo.routeName,
@@ -64,7 +62,7 @@ export async function GET(request: NextRequest) {
     if (routeId) {
       const odsayResult = await getBusLaneDetail(routeId);
       if (odsayResult.stations.length > 0) {
-        return NextResponse.json({
+        return successResponse({
           routeInfo: odsayResult.lane?.[0] ? {
             routeId,
             routeName: odsayResult.lane[0].busNo,
@@ -90,16 +88,13 @@ export async function GET(request: NextRequest) {
     }
 
     // 모든 API 실패
-    return NextResponse.json({
+    return successResponse({
       routeInfo: busNo ? { routeId, routeName: busNo } : null,
       stations: [],
       realtime: [],
     });
   } catch (error) {
     console.error('Bus route API error:', error);
-    return NextResponse.json(
-      { error: '버스 노선 정보 조회에 실패했습니다.' },
-      { status: 500 }
-    );
+    return ApiErrors.internalError('버스 노선 정보 조회에 실패했습니다.');
   }
 }

@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { ApiErrors, successResponse } from '@/lib/api-response';
 
 interface ArrivalLog {
   arrival_time: string;
@@ -48,7 +49,7 @@ export async function GET(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return ApiErrors.unauthorized();
   }
 
   const { searchParams } = new URL(request.url);
@@ -73,11 +74,11 @@ export async function GET(request: NextRequest) {
     const { data: targets, error: targetsError } = await targetsQuery;
 
     if (targetsError) {
-      return NextResponse.json({ error: targetsError.message }, { status: 500 });
+      return ApiErrors.internalError(targetsError.message);
     }
 
     if (!targets || targets.length === 0) {
-      return NextResponse.json({ recommendations: [] });
+      return successResponse({ recommendations: [] });
     }
 
     // 2. 오늘 요일
@@ -216,7 +217,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({
+    return successResponse({
       recommendations,
       today: {
         dayOfWeek,
@@ -230,10 +231,8 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('[Recommend API] Error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
-    );
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return ApiErrors.internalError('추천 데이터 조회에 실패했습니다.', errorMessage);
   }
 }
 
