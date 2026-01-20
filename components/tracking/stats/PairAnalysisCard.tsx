@@ -60,6 +60,111 @@ export function PairAnalysisCard({ pair, days, onDelete }: PairAnalysisCardProps
     }
   };
 
+  const exportToMarkdown = () => {
+    if (!analysis) return;
+
+    const now = new Date().toLocaleString('ko-KR');
+    const lines: string[] = [
+      `# 페어 정류장 분석 리포트`,
+      ``,
+      `> 생성일시: ${now}`,
+      ``,
+      `## 기본 정보`,
+      ``,
+      `| 항목 | 값 |`,
+      `|------|-----|`,
+      `| 버스 | ${analysis.busNo} |`,
+      `| A 정류장 | ${analysis.stationA} |`,
+      `| B 정류장 | ${analysis.stationB} |`,
+      `| 분석 기간 | ${analysis.period} |`,
+      ``,
+      `## 소요시간 통계`,
+      ``,
+      `| 항목 | 값 |`,
+      `|------|-----|`,
+      `| 평균 | ${analysis.avgTravelTime !== null ? `${analysis.avgTravelTime}분` : '-'} |`,
+      `| 최소 | ${analysis.minTravelTime !== null ? `${analysis.minTravelTime}분` : '-'} |`,
+      `| 최대 | ${analysis.maxTravelTime !== null ? `${analysis.maxTravelTime}분` : '-'} |`,
+      `| 표준편차 | ${analysis.stdDevTravelTime !== null ? `${analysis.stdDevTravelTime}분` : '-'} |`,
+      ``,
+      `## 매칭 통계`,
+      ``,
+      `| 항목 | 값 |`,
+      `|------|-----|`,
+      `| A 정류장 도착 수 | ${analysis.totalArrivalsAtA}건 |`,
+      `| B 정류장 도착 수 | ${analysis.totalArrivalsAtB}건 |`,
+      `| 매칭 성공 | ${analysis.matchedCount}건 |`,
+      `| 누락 | ${analysis.missingAtB}건 |`,
+      `| 매칭률 | ${analysis.matchRate}% |`,
+      ``,
+    ];
+
+    // 이슈 요약
+    if (analysis.issuesSummary) {
+      lines.push(`## 분석 이슈 요약`);
+      lines.push(``);
+      lines.push(`| 이슈 유형 | 건수 |`);
+      lines.push(`|----------|------|`);
+      lines.push(`| 중복 기록 | ${analysis.issuesSummary.duplicates}건 |`);
+      lines.push(`| 매칭 실패 | ${analysis.issuesSummary.unmatched}건 |`);
+      lines.push(`| 번호판 없음 | ${analysis.issuesSummary.noPlateNo}건 |`);
+      lines.push(`| 시간 초과 | ${analysis.issuesSummary.timeout}건 |`);
+      lines.push(``);
+    }
+
+    // 최근 매칭 기록
+    if (analysis.recentMatches.length > 0) {
+      lines.push(`## 최근 매칭 기록`);
+      lines.push(``);
+      lines.push(`| 날짜 | A 도착 | B 도착 | 소요시간 | 차량번호 |`);
+      lines.push(`|------|--------|--------|----------|----------|`);
+
+      for (const match of analysis.recentMatches) {
+        const dateA = new Date(match.arrivalAtA);
+        const dateB = new Date(match.arrivalAtB);
+        const dateStr = dateA.toLocaleDateString('ko-KR');
+        const timeA = dateA.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+        const timeB = dateB.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+
+        lines.push(`| ${dateStr} | ${timeA} | ${timeB} | ${match.travelTimeMinutes}분 | ${match.plateNo} |`);
+      }
+      lines.push(``);
+    }
+
+    // 상세 이슈 (있는 경우)
+    if (analysis.issues && analysis.issues.length > 0) {
+      lines.push(`## 상세 이슈 목록`);
+      lines.push(``);
+      lines.push(`| 유형 | 정류장 | 시간 | 설명 | 차량번호 |`);
+      lines.push(`|------|--------|------|------|----------|`);
+
+      for (const issue of analysis.issues.slice(0, 30)) {
+        const time = new Date(issue.arrivalTime).toLocaleString('ko-KR');
+        lines.push(`| ${issue.type} | ${issue.station} | ${time} | ${issue.description} | ${issue.plateNo || '-'} |`);
+      }
+
+      if (analysis.issues.length > 30) {
+        lines.push(``);
+        lines.push(`> ... 외 ${analysis.issues.length - 30}건`);
+      }
+      lines.push(``);
+    }
+
+    lines.push(`---`);
+    lines.push(`*Bus Finder 페어 분석 리포트*`);
+
+    const content = lines.join('\n');
+    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `pair-analysis-${pair.busNo}-${new Date().toISOString().slice(0, 10)}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   if (loading) {
     return (
       <Card className="p-4 animate-pulse">
@@ -105,17 +210,31 @@ export function PairAnalysisCard({ pair, days, onDelete }: PairAnalysisCardProps
             )}
           </div>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-muted-foreground hover:text-destructive"
-          onClick={handleDelete}
-          aria-label="페어 삭제"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground hover:text-primary"
+            onClick={exportToMarkdown}
+            aria-label="Markdown으로 내보내기"
+            title="MD 내보내기"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground hover:text-destructive"
+            onClick={handleDelete}
+            aria-label="페어 삭제"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </Button>
+        </div>
       </div>
 
       {/* 소요시간 통계 */}
