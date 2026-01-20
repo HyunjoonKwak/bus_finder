@@ -215,6 +215,42 @@ export function PairAnalysisCard({ pair, days, onDelete }: PairAnalysisCardProps
               매칭된 기록이 없습니다. 차량번호(plate_no) 데이터가 필요합니다.
             </p>
           )}
+
+          {/* 분석 이슈 요약 */}
+          {analysis.issuesSummary && (
+            <div className="mt-3 pt-3 border-t border-border">
+              <p className="text-xs font-medium text-muted-foreground mb-2">📊 분석 이슈</p>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                {analysis.issuesSummary.duplicates > 0 && (
+                  <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+                    <span>⚠️</span>
+                    <span>중복 기록: {analysis.issuesSummary.duplicates}건</span>
+                  </div>
+                )}
+                {analysis.issuesSummary.unmatched > 0 && (
+                  <div className="flex items-center gap-1.5 text-red-600 dark:text-red-400">
+                    <span>❌</span>
+                    <span>매칭 실패: {analysis.issuesSummary.unmatched}건</span>
+                  </div>
+                )}
+                {analysis.issuesSummary.noPlateNo > 0 && (
+                  <div className="flex items-center gap-1.5 text-muted-foreground">
+                    <span>🚫</span>
+                    <span>번호판 없음: {analysis.issuesSummary.noPlateNo}건</span>
+                  </div>
+                )}
+                {analysis.issuesSummary.timeout > 0 && (
+                  <div className="flex items-center gap-1.5 text-orange-600 dark:text-orange-400">
+                    <span>⏱️</span>
+                    <span>시간 초과: {analysis.issuesSummary.timeout}건</span>
+                  </div>
+                )}
+              </div>
+              {Object.values(analysis.issuesSummary).every(v => v === 0) && (
+                <p className="text-xs text-green-600 dark:text-green-400">✅ 이슈 없음</p>
+              )}
+            </div>
+          )}
         </div>
       )}
     </Card>
