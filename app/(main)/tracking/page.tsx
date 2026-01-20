@@ -58,6 +58,7 @@ export default function TrackingPage() {
     isLoading: bgLoading,
     lastCollected,
     logs: bgLogs,
+    schedulerStatus,
     startCollection,
     stopCollection,
     requestNotificationPermission,
@@ -225,27 +226,6 @@ export default function TrackingPage() {
     );
   };
 
-  const handleLogArrival = async (target: TrackingTarget) => {
-    try {
-      const response = await fetch('/api/tracking/logs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          bus_id: target.bus_id,
-          bus_no: target.bus_no,
-          station_id: target.station_id,
-          station_name: target.station_name,
-        }),
-      });
-
-      if (response.ok) {
-        alert('도착 시간이 기록되었습니다.');
-      }
-    } catch (error) {
-      console.error('Log arrival error:', error);
-    }
-  };
-
   const handleToggleBgCollection = async () => {
     if (bgCollecting) {
       stopCollection();
@@ -311,7 +291,9 @@ export default function TrackingPage() {
             <div>
               <p className="text-sm font-medium text-green-700 dark:text-green-400">자동 수집 활성화</p>
               <p className="text-xs text-green-600/70 dark:text-green-400/70 mt-1">
-                5분마다 자동으로 도착 정보를 수집하고 기록합니다.
+                {schedulerStatus?.dbSettings
+                  ? `${schedulerStatus.dbSettings.intervalMinutes}분 간격 (${schedulerStatus.dbSettings.startHour}:00~${schedulerStatus.dbSettings.endHour === 24 ? '24:00' : schedulerStatus.dbSettings.endHour + ':00'})`
+                  : '서버에서 자동으로 도착 정보를 수집합니다.'}
               </p>
             </div>
             {lastCollected && (
@@ -323,6 +305,14 @@ export default function TrackingPage() {
               </div>
             )}
           </div>
+          {/* 활성 타이머 정보 */}
+          {schedulerStatus?.activeTimers !== undefined && schedulerStatus.activeTimers > 0 && (
+            <div className="mt-2 pt-2 border-t border-green-500/20">
+              <p className="text-xs text-green-600/70 dark:text-green-400/70">
+                ⏱️ 활성 타이머: {schedulerStatus.activeTimers}개
+              </p>
+            </div>
+          )}
         </Card>
       )}
 
@@ -488,13 +478,6 @@ export default function TrackingPage() {
                 </div>
 
                 <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    className="flex-1"
-                    onClick={() => handleLogArrival(target)}
-                  >
-                    도착 기록
-                  </Button>
                   <Button
                     variant="outline"
                     size="sm"

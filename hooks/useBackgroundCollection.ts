@@ -3,18 +3,35 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
 /**
- * 서버 기반 백그라운드 수집 상태 조회 훅
+ * 서버 스케줄러 기반 백그라운드 수집 상태 관리 훅
  *
- * 수집은 서버 Cron에서 처리하므로, 이 훅은:
- * - 수집 활성화/비활성화 설정만 관리
- * - 최근 기록 조회
+ * Settings 페이지의 스케줄러와 동일한 API를 사용하여
+ * Tracking 페이지에서도 스케줄러를 제어할 수 있습니다.
  */
+
+interface SchedulerStatus {
+  isRunning: boolean;
+  intervalMinutes: number;
+  lastRun: string | null;
+  lastResult: {
+    arrivals: { checked: number; logged: number };
+    lastBusAlerts: { checked: number; sent: number };
+  } | null;
+  activeTimers?: number;
+  dbSettings?: {
+    enabled: boolean;
+    intervalMinutes: number;
+    startHour: number;
+    endHour: number;
+  } | null;
+}
 
 interface CollectionStatus {
   isRunning: boolean;
   lastCollected: Date | null;
   logs: Array<{ bus_no: string; station_name: string; arrival_time: string }>;
   isLoading: boolean;
+  schedulerStatus: SchedulerStatus | null;
 }
 
 export function useBackgroundCollection() {
@@ -23,21 +40,22 @@ export function useBackgroundCollection() {
     lastCollected: null,
     logs: [],
     isLoading: true,
+    schedulerStatus: null,
   });
   const isInitializedRef = useRef(false);
 
-  // 서버에서 설정 로드
-  const loadSettings = useCallback(async () => {
+  // 스케줄러 상태 조회
+  const fetchSchedulerStatus = useCallback(async (): Promise<SchedulerStatus | null> => {
     try {
-      const response = await fetch('/api/settings');
+      const response = await fetch('/api/cron/scheduler');
       if (response.ok) {
         const data = await response.json();
-        return data.settings?.bg_collection_enabled || false;
+        return data;
       }
     } catch (error) {
-      console.error('[BG] Failed to load settings:', error);
+      console.error('[BG] Failed to fetch scheduler status:', error);
     }
-    return false;
+    return null;
   }, []);
 
   // 서버에서 최근 기록 로드
@@ -54,59 +72,97 @@ export function useBackgroundCollection() {
     return [];
   }, []);
 
-  // 서버에 설정 저장
-  const saveSettings = useCallback(async (enabled: boolean) => {
-    try {
-      await fetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bg_collection_enabled: enabled }),
-      });
-    } catch (error) {
-      console.error('[BG] Failed to save settings:', error);
-    }
-  }, []);
-
-  // 초기화: 서버에서 설정 및 기록 로드
+  // 초기화: 스케줄러 상태 및 기록 로드
   useEffect(() => {
     if (isInitializedRef.current) return;
     isInitializedRef.current = true;
 
     const initialize = async () => {
-      const [enabled, logs] = await Promise.all([
-        loadSettings(),
+      const [schedulerStatus, logs] = await Promise.all([
+        fetchSchedulerStatus(),
         loadRecentLogs(),
       ]);
 
       setStatus({
-        isRunning: enabled,
-        lastCollected: logs.length > 0 ? new Date(logs[0].arrival_time) : null,
+        isRunning: schedulerStatus?.isRunning || false,
+        lastCollected: schedulerStatus?.lastRun ? new Date(schedulerStatus.lastRun) : null,
         logs,
         isLoading: false,
+        schedulerStatus,
       });
     };
 
     initialize();
-  }, [loadSettings, loadRecentLogs]);
+  }, [fetchSchedulerStatus, loadRecentLogs]);
 
+  // 스케줄러 시작 (실제 서버 스케줄러 제어)
   const startCollection = useCallback(async () => {
-    setStatus((prev) => ({ ...prev, isRunning: true }));
-    await saveSettings(true);
-  }, [saveSettings]);
+    try {
+      const response = await fetch('/api/cron/scheduler', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'start',
+          intervalMinutes: 5,
+          startHour: 5,
+          endHour: 24,
+        }),
+      });
 
+      if (response.ok) {
+        const data = await response.json();
+        setStatus((prev) => ({
+          ...prev,
+          isRunning: data.isRunning,
+          schedulerStatus: data,
+        }));
+        return true;
+      }
+    } catch (error) {
+      console.error('[BG] Failed to start scheduler:', error);
+    }
+    return false;
+  }, []);
+
+  // 스케줄러 중지 (실제 서버 스케줄러 제어)
   const stopCollection = useCallback(async () => {
-    setStatus((prev) => ({ ...prev, isRunning: false }));
-    await saveSettings(false);
-  }, [saveSettings]);
+    try {
+      const response = await fetch('/api/cron/scheduler', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'stop' }),
+      });
 
+      if (response.ok) {
+        const data = await response.json();
+        setStatus((prev) => ({
+          ...prev,
+          isRunning: data.isRunning,
+          schedulerStatus: data,
+        }));
+        return true;
+      }
+    } catch (error) {
+      console.error('[BG] Failed to stop scheduler:', error);
+    }
+    return false;
+  }, []);
+
+  // 로그 새로고침
   const refreshLogs = useCallback(async () => {
-    const logs = await loadRecentLogs();
+    const [schedulerStatus, logs] = await Promise.all([
+      fetchSchedulerStatus(),
+      loadRecentLogs(),
+    ]);
+
     setStatus((prev) => ({
       ...prev,
       logs,
-      lastCollected: logs.length > 0 ? new Date(logs[0].arrival_time) : prev.lastCollected,
+      isRunning: schedulerStatus?.isRunning || false,
+      lastCollected: schedulerStatus?.lastRun ? new Date(schedulerStatus.lastRun) : prev.lastCollected,
+      schedulerStatus,
     }));
-  }, [loadRecentLogs]);
+  }, [fetchSchedulerStatus, loadRecentLogs]);
 
   const requestNotificationPermission = useCallback(async () => {
     if ('Notification' in window) {
