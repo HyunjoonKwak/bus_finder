@@ -66,6 +66,7 @@ export default function TrackingPage() {
   const [pairs, setPairs] = useState<StationPair[]>([]);
   const [pairsLoading, setPairsLoading] = useState(false);
   const [pairModalOpen, setPairModalOpen] = useState(false);
+  const [pairDays, setPairDays] = useState(30);
 
   useEffect(() => {
     targetsRef.current = targets;
@@ -696,13 +697,26 @@ export default function TrackingPage() {
               <span className="text-lg">🔗</span>
               <h2 className="font-semibold text-foreground">페어 정류장 분석</h2>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setPairModalOpen(true)}
-            >
-              + 페어 추가
-            </Button>
+            <div className="flex items-center gap-2">
+              <select
+                value={pairDays}
+                onChange={(e) => setPairDays(parseInt(e.target.value))}
+                className="text-xs border rounded px-2 py-1 bg-background"
+              >
+                <option value={7}>최근 7일</option>
+                <option value={14}>최근 14일</option>
+                <option value={30}>최근 30일</option>
+                <option value={60}>최근 60일</option>
+                <option value={90}>최근 90일</option>
+              </select>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPairModalOpen(true)}
+              >
+                + 페어 추가
+              </Button>
+            </div>
           </div>
 
           {pairsLoading ? (
@@ -726,7 +740,7 @@ export default function TrackingPage() {
                 <PairAnalysisCard
                   key={pair.id}
                   pair={pair}
-                  days={30}
+                  days={pairDays}
                   onDelete={handlePairDelete}
                 />
               ))}

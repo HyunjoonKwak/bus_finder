@@ -6,6 +6,9 @@ import type { PairAnalysis, MatchedArrival, AnalysisIssue } from '@/types/stats'
 // 중복 판단 기준 (5분 이내 같은 plate_no)
 const DUPLICATE_THRESHOLD_MS = 5 * 60 * 1000;
 
+// 최대 소요시간 (6시간) - 같은 날이어도 다른 운행 매칭 방지
+const MAX_TRAVEL_TIME_MS = 6 * 60 * 60 * 1000;
+
 // 날짜 문자열 추출 (KST 기준)
 function getDateString(isoString: string): string {
   const date = new Date(isoString);
@@ -229,18 +232,22 @@ export async function GET(request: NextRequest) {
       if (arrivalA.plate_no === arrivalB.plate_no && timeDiff > 0) {
         // 같은 날인지 체크
         if (arrivalADate === arrivalBDate) {
-          // 같은 날 매칭 성공
-          const travelTimeMinutes = Math.round(timeDiff / (1000 * 60));
-          matchedArrivals.push({
-            plateNo: arrivalA.plate_no,
-            arrivalAtA: arrivalA.arrival_time,
-            arrivalAtB: arrivalB.arrival_time,
-            travelTimeMinutes,
-          });
-          matchedBIds.add(arrivalB.id);
-          matchedAIds.add(arrivalA.id);
-          matched = true;
-          break;
+          // 6시간 이내인지 체크
+          if (timeDiff <= MAX_TRAVEL_TIME_MS) {
+            // 같은 날 + 6시간 이내 → 매칭 성공
+            const travelTimeMinutes = Math.round(timeDiff / (1000 * 60));
+            matchedArrivals.push({
+              plateNo: arrivalA.plate_no,
+              arrivalAtA: arrivalA.arrival_time,
+              arrivalAtB: arrivalB.arrival_time,
+              travelTimeMinutes,
+            });
+            matchedBIds.add(arrivalB.id);
+            matchedAIds.add(arrivalA.id);
+            matched = true;
+            break;
+          }
+          // 같은 날이지만 6시간 초과 → 다른 운행으로 간주, 다음 B 도착 찾기
         } else {
           // 다른 날 매칭 - 기록만 함
           if (!diffDayMatch || timeDiff < diffDayMatch.timeDiff) {
