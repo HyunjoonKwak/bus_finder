@@ -7,19 +7,13 @@ import { cn } from '@/lib/utils';
 import { useSearchStore, MyPlace } from '@/lib/store';
 import { createClient } from '@/lib/supabase/client';
 import { getCurrentPosition } from '@/lib/kakao';
+import { useDebounce } from '@/lib/hooks';
+import type { MyPlaceDB } from '@/types/my-place';
 
 type TabType = 'recent' | 'places' | 'transit' | 'route';
 
-interface ApiMyPlace {
-  id: string;
-  name: string;
-  place_name: string;
-  address: string | null;
-  x: string;
-  y: string;
-  icon: 'home' | 'office' | 'pin';
-  sort_order: number;
-}
+// DB 형식 사용 (API 응답)
+type ApiMyPlace = MyPlaceDB;
 
 interface RouteHistoryItem {
   id: string;
@@ -63,6 +57,7 @@ export default function SearchUnifiedPage() {
   const { recentSearches, removeRecentSearch, clearSearches } = useSearchStore();
 
   const [query, setQuery] = useState('');
+  const debouncedQuery = useDebounce(query, 300);
   const [activeTab, setActiveTab] = useState<TabType>('recent');
   const [user, setUser] = useState<{ id: string } | null>(null);
   const [myPlaces, setMyPlaces] = useState<MyPlace[]>([]);
@@ -213,18 +208,15 @@ export default function SearchUnifiedPage() {
     }
   }, []);
 
+  // 디바운스된 검색어로 검색 실행
   useEffect(() => {
-    const debounce = setTimeout(() => {
-      if (query.length >= 2) {
-        handleSearch(query);
-        setActiveTab('transit');
-      } else {
-        setSearchResults([]);
-      }
-    }, 300);
-
-    return () => clearTimeout(debounce);
-  }, [query, handleSearch]);
+    if (debouncedQuery.length >= 2) {
+      handleSearch(debouncedQuery);
+      setActiveTab('transit');
+    } else {
+      setSearchResults([]);
+    }
+  }, [debouncedQuery, handleSearch]);
 
   const handleBack = () => {
     router.back();
