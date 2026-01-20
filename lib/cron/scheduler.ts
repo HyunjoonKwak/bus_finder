@@ -260,10 +260,34 @@ export function getSchedulerStatus() {
     intervalMinutes: state.intervalMinutes,
     lastRun: state.lastRun?.toISOString() || null,
     lastResult: state.lastResult,
-    // 동적 타이머 정보 추가
+    // 동적 타이머 정보 추가 (메모리 기반 - 서버리스에서는 0일 수 있음)
     activeTimers: timerManager.getActiveTimerCount(),
     timerDetails: timerManager.getTimerStatus(),
   };
+}
+
+/**
+ * DB 기반 활성 추적 대상 수 조회
+ * 서버리스 환경에서도 정확한 값을 반환
+ */
+export async function getActiveTrackingCount(): Promise<number> {
+  try {
+    const supabase = createServiceClient();
+    const { count, error } = await supabase
+      .from('bus_tracking_targets')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_active', true);
+
+    if (error) {
+      console.error('[Scheduler] Failed to get active tracking count:', error.message);
+      return 0;
+    }
+
+    return count || 0;
+  } catch (error) {
+    console.error('[Scheduler] Error getting active tracking count:', error);
+    return 0;
+  }
 }
 
 /**

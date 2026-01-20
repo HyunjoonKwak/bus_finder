@@ -4,6 +4,8 @@
  * - 경기도: apis.data.go.kr/6410000
  */
 
+import { incrementApiCallCount } from '@/lib/api-call-counter';
+
 export interface BusArrivalInfo {
   routeName: string; // 버스 번호
   routeId?: string;
@@ -111,6 +113,9 @@ export async function getSeoulBusArrival(arsId: string): Promise<BusArrivalInfo[
   try {
     const response = await fetch(url);
     const text = await response.text();
+
+    // API 호출 카운트 증가
+    incrementApiCallCount().catch(() => {});
 
     // 에러 응답 체크
     if (text.includes('headerCd>') && !text.includes('<headerCd>0</headerCd>')) {
@@ -254,6 +259,9 @@ async function getGyeonggiStationId(mobileNo: string): Promise<string | null> {
     const response = await fetch(url);
     const data = await response.json();
 
+    // API 호출 카운트 증가
+    incrementApiCallCount().catch(() => {});
+
     const stationList = data?.response?.msgBody?.busStationList;
     if (!stationList) return null;
 
@@ -287,6 +295,9 @@ export async function getGyeonggiBusArrival(stationId: string): Promise<BusArriv
   try {
     const response = await fetch(url);
     const data = await response.json();
+
+    // API 호출 카운트 증가
+    incrementApiCallCount().catch(() => {});
 
     const arrivals: BusArrivalInfo[] = [];
     const arrivalList = data?.response?.msgBody?.busArrivalList;

@@ -8,6 +8,7 @@ import {
   loadSchedulerSettings,
   saveSchedulerSettings,
   initSchedulerFromDB,
+  getActiveTrackingCount,
 } from '@/lib/cron/scheduler';
 
 /**
@@ -33,8 +34,14 @@ export async function GET() {
     await initSchedulerFromDB();
   }
 
+  // DB 기반 활성 추적 대상 수 조회 (서버리스 환경 대응)
+  const activeTrackingCount = await getActiveTrackingCount();
+
   return NextResponse.json({
     ...memoryStatus,
+    // 메모리 기반 activeTimers가 0이면 DB 기반 값 사용
+    activeTimers: memoryStatus.activeTimers > 0 ? memoryStatus.activeTimers : activeTrackingCount,
+    activeTrackingTargets: activeTrackingCount,
     dbSettings,
   });
 }

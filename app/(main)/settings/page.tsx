@@ -295,13 +295,13 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* 동적 타이머 현황 */}
+        {/* 활성 추적 대상 현황 */}
         {scheduler?.isRunning && typeof scheduler.activeTimers === 'number' && (
           <div className="border-t pt-2 mt-2">
             <div className="flex items-center justify-between mb-2">
               <p className="text-xs font-medium text-foreground flex items-center gap-1">
-                <span>⏱️</span>
-                <span>활성 타이머: {scheduler.activeTimers}개</span>
+                <span>📡</span>
+                <span>활성 추적: {scheduler.activeTimers}개</span>
               </p>
             </div>
             {scheduler.timerDetails && scheduler.timerDetails.length > 0 && (
