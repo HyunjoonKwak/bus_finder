@@ -86,9 +86,9 @@ export async function GET(request: NextRequest) {
     if (!arrivalA.plate_no) continue;
 
     // A 도착 이후 B 도착 중에서 같은 plate_no 찾기
-    // (A 도착 후 1시간 이내의 B 도착만 유효)
+    // (A 도착 후 6시간 이내의 B 도착만 유효 - 회차 노선 고려)
     const arrivalATime = new Date(arrivalA.arrival_time).getTime();
-    const maxWaitTime = 60 * 60 * 1000; // 1시간
+    const maxWaitTime = 6 * 60 * 60 * 1000; // 6시간
 
     for (const arrivalB of arrivalsB) {
       if (!arrivalB.plate_no) continue;
