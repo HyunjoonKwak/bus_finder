@@ -19,73 +19,21 @@ import { MobileBottomSheet } from '@/components/mobile/MobileBottomSheet';
 import { MobileSearchOverlay } from '@/components/mobile/MobileSearchOverlay';
 import { MobileInfoCard } from '@/components/mobile/MobileInfoCard';
 import { MobileDetailPanel } from '@/components/mobile/MobileDetailPanel';
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
-// Kakao Maps 타입 정의 (SDK가 TypeScript를 완전 지원하지 않아 any 사용)
-type KakaoMap = any;
-type KakaoLatLng = any;
-type KakaoLatLngBounds = any;
-type KakaoOverlay = any;
-type KakaoCircle = any;
-type KakaoPolyline = any;
-type KakaoCustomOverlay = any;
-/* eslint-enable @typescript-eslint/no-explicit-any */
-
-interface BusPosition {
-  stationSeq: number;
-  busStationSeq: number;
-  plateNo: string;
-  lowPlate?: boolean;
-  crowded?: number;
-  direction?: number;
-}
-
-type TabType = 'station' | 'route' | 'search' | 'tracking' | 'favorites';
-
-interface FavoriteStation {
-  id: string;
-  station_id: string;
-  station_name: string;
-  x?: string;
-  y?: string;
-}
-
-interface FavoriteRoute {
-  id: string;
-  bus_id: string;
-  bus_no: string;
-  bus_type?: number;
-}
-
-interface TrackingTarget {
-  id: string;
-  bus_id: string;
-  bus_no: string;
-  station_id: string;
-  station_name: string;
-  ars_id?: string;
-  is_active: boolean;
-}
-
-interface TrackingTargetWithArrival extends TrackingTarget {
-  arrival?: {
-    arrivalSec: number;
-    leftStation: number;
-  };
-  lastChecked?: Date;
-}
-
-interface SearchHistoryItem {
-  type: 'station' | 'bus';
-  id: string;
-  name: string;
-  subInfo?: string;
-  x?: string;
-  y?: string;
-  arsID?: string;
-  busType?: number; // 버스 타입 (1: 일반, 11: 광역 등)
-  timestamp: number;
-}
+import type {
+  KakaoMap,
+  KakaoLatLng,
+  KakaoCircle,
+  KakaoPolyline,
+  KakaoCustomOverlay,
+  BusPosition,
+  TabType,
+  FavoriteStation,
+  FavoriteRoute,
+  TrackingTarget,
+  TrackingTargetWithArrival,
+  SearchHistoryItem,
+  ArrivalApiItem,
+} from '@/types/bus-page';
 
 function BusPageContent() {
   const searchParams = useSearchParams();
