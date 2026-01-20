@@ -8,23 +8,17 @@ import { Input } from '@/components/ui/input';
 import { PlaceSearchInput } from '@/components/search/PlaceSearchInput';
 import { createClient } from '@/lib/supabase/client';
 import Link from 'next/link';
+import type { MyPlaceDB } from '@/types/my-place';
+import { PLACE_ICONS } from '@/types/my-place';
 
-interface MyPlace {
-  id: string;
-  name: string;
-  place_name: string;
-  address: string | null;
-  x: string;
-  y: string;
-  icon: 'home' | 'office' | 'pin';
-  sort_order: number;
-}
+// DB 형식 사용 (API 응답)
+type MyPlace = MyPlaceDB;
 
-const ICON_OPTIONS = [
-  { value: 'home', label: '집', emoji: '🏠' },
-  { value: 'office', label: '회사', emoji: '🏢' },
-  { value: 'pin', label: '기타', emoji: '📍' },
-];
+const ICON_OPTIONS = Object.entries(PLACE_ICONS).map(([value, { icon, label }]) => ({
+  value,
+  label,
+  emoji: icon,
+}));
 
 export default function MyPlacesPage() {
   const router = useRouter();

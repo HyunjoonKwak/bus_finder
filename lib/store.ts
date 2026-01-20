@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { SearchFilters, Location } from '@/types';
+import type { MyPlace } from '@/types/my-place';
+
+export type { MyPlace } from '@/types/my-place';
 
 interface RecentSearch {
   origin: string;
@@ -28,17 +31,7 @@ export interface RecentRoute {
   subInfo?: string; // 기점 → 종점
 }
 
-// 내 장소 타입
-export interface MyPlace {
-  id: string;
-  name: string;
-  placeName: string;
-  address?: string;
-  x: string;
-  y: string;
-  icon: 'home' | 'office' | 'pin';
-  sortOrder: number;
-}
+// MyPlace 타입은 types/my-place.ts에서 import
 
 interface SearchState {
   origin: Location | null;

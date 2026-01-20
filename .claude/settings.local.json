@@ -34,7 +34,12 @@
       "Bash(npm audit:*)",
       "Bash(git rev-parse:*)",
       "Bash(node:*)",
-      "Skill(commit)"
+      "Skill(commit)",
+      "Bash(npx supabase:*)",
+      "WebFetch(domain:m.map.kakao.com)",
+      "Bash(xargs:*)",
+      "Bash(ps:*)",
+      "Bash(pnpm tsc:*)"
     ]
   },
   "outputStyle": "default"

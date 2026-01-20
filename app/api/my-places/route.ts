@@ -1,19 +1,10 @@
 import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { ApiErrors, successResponse } from '@/lib/api-response';
+import type { MyPlaceDB } from '@/types/my-place';
 
-export interface MyPlace {
-  id: string;
-  user_id: string;
-  name: string;
-  place_name: string;
-  address: string | null;
-  x: string;
-  y: string;
-  icon: 'home' | 'office' | 'pin';
-  sort_order: number;
-  created_at: string;
-}
+// DB 타입은 types/my-place.ts에서 import
+export type { MyPlaceDB as MyPlace } from '@/types/my-place';
 
 // 내 장소 목록 조회
 export async function GET() {
@@ -38,7 +29,7 @@ export async function GET() {
     return ApiErrors.internalError(`내 장소 조회 실패: ${error.message}`, error.code);
   }
 
-  return successResponse({ places: data as MyPlace[] });
+  return successResponse({ places: data as MyPlaceDB[] });
 }
 
 // 내 장소 추가
@@ -116,5 +107,5 @@ export async function POST(request: NextRequest) {
     return ApiErrors.internalError(`내 장소 추가 실패: ${error.message}`, error.code);
   }
 
-  return successResponse({ place: data as MyPlace }, 201);
+  return successResponse({ place: data as MyPlaceDB }, 201);
 }

@@ -6,22 +6,16 @@ import { loadKakaoMapScript, getCurrentPosition } from '@/lib/kakao';
 import { MapHeader } from '@/components/main/MapHeader';
 import { MainTabs } from '@/components/main/MainTabs';
 import { VERSION, GIT_HASH } from '@/lib/version';
+import type { MyPlaceDB } from '@/types/my-place';
+import { PLACE_ICONS } from '@/types/my-place';
 
-interface MyPlace {
-  id: string;
-  name: string;
-  place_name: string;
-  address: string | null;
-  x: string;
-  y: string;
-  icon: 'home' | 'office' | 'pin';
-}
+// DB 형식 사용 (API 응답)
+type MyPlace = MyPlaceDB;
 
-const ICON_MAP: Record<string, string> = {
-  home: '🏠',
-  office: '🏢',
-  pin: '📍',
-};
+// 아이콘 이모지 맵
+const ICON_MAP: Record<string, string> = Object.fromEntries(
+  Object.entries(PLACE_ICONS).map(([key, { icon }]) => [key, icon])
+);
 
 const ICON_COLORS: Record<string, string> = {
   home: '#3B82F6',

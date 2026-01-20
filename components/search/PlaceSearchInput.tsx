@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import type { MyPlaceDB, PlaceIcon } from '@/types/my-place';
+import { PLACE_ICONS } from '@/types/my-place';
 
 interface Place {
   id: string;
@@ -14,15 +16,8 @@ interface Place {
   y: string;
 }
 
-interface MyPlace {
-  id: string;
-  name: string;
-  place_name: string;
-  address: string | null;
-  x: string;
-  y: string;
-  icon: 'home' | 'office' | 'pin';
-}
+// DB 형식 사용 (API 응답)
+type MyPlace = MyPlaceDB;
 
 interface PlaceSearchInputProps {
   value: string;
@@ -35,11 +30,10 @@ interface PlaceSearchInputProps {
   showMyPlaces?: boolean;
 }
 
-const ICON_MAP = {
-  home: '🏠',
-  office: '🏢',
-  pin: '📍',
-};
+// 아이콘 이모지 맵 (중앙화된 타입에서 생성)
+const ICON_MAP: Record<PlaceIcon, string> = Object.fromEntries(
+  Object.entries(PLACE_ICONS).map(([key, { icon }]) => [key, icon])
+) as Record<PlaceIcon, string>;
 
 export function PlaceSearchInput({
   value,
