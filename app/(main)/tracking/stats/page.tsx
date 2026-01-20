@@ -4,14 +4,16 @@ import { useEffect, useState, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import type { Stats, Pagination, ArrivalLog } from '@/types/stats';
+import type { Stats, Pagination, ArrivalLog, StationPair } from '@/types/stats';
 import {
   SummaryCard,
   WeekdayWeekendCard,
   DayStatsChart,
   HourStatsChart,
   ArrivalLogsList,
+  PairAnalysisCard,
 } from '@/components/tracking/stats';
+import { PairSetupModal } from '@/components/tracking/PairSetupModal';
 
 function StatsContent() {
   const searchParams = useSearchParams();
@@ -27,6 +29,11 @@ function StatsContent() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const logsPerPage = 20;
+
+  // 페어 관련 상태
+  const [pairs, setPairs] = useState<StationPair[]>([]);
+  const [pairsLoading, setPairsLoading] = useState(false);
+  const [pairModalOpen, setPairModalOpen] = useState(false);
 
   const busId = searchParams.get('bus_id');
   const stationId = searchParams.get('station_id');
@@ -74,12 +81,36 @@ function StatsContent() {
     [busId, stationId, days, logsPerPage]
   );
 
+  // 페어 목록 조회
+  const fetchPairs = useCallback(async () => {
+    if (!busId) return;
+
+    try {
+      setPairsLoading(true);
+      const response = await fetch(`/api/tracking/pairs?busId=${busId}`);
+
+      if (response.ok) {
+        const data = await response.json();
+        // 현재 정류장이 포함된 페어만 필터링
+        const relevantPairs = (data.pairs || []).filter(
+          (p: StationPair) => p.stationA.id === stationId || p.stationB.id === stationId
+        );
+        setPairs(relevantPairs);
+      }
+    } catch {
+      // 페어 로드 실패는 무시
+    } finally {
+      setPairsLoading(false);
+    }
+  }, [busId, stationId]);
+
   useEffect(() => {
     if (busId && stationId) {
       setCurrentPage(1);
       fetchStats(1, true);
+      fetchPairs();
     }
-  }, [busId, stationId, days, fetchStats]);
+  }, [busId, stationId, days, fetchStats, fetchPairs]);
 
   const goToPage = (page: number) => {
     if (page >= 1 && page <= (pagination?.totalPages || 1) && !logsLoading) {
@@ -107,6 +138,11 @@ function StatsContent() {
     } finally {
       setDeletingId(null);
     }
+  };
+
+  // 페어 삭제 핸들러
+  const handlePairDelete = (pairId: string) => {
+    setPairs((prev) => prev.filter((p) => p.id !== pairId));
   };
 
   // CSV 내보내기
@@ -374,6 +410,51 @@ function StatsContent() {
 
           <HourStatsChart byHour={stats.byHour} />
 
+          {/* 페어 정류장 분석 */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🔗</span>
+                <h3 className="font-semibold">페어 정류장 분석</h3>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPairModalOpen(true)}
+              >
+                + 페어 추가
+              </Button>
+            </div>
+
+            {pairsLoading ? (
+              <Card className="p-4">
+                <div className="flex justify-center py-4">
+                  <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                </div>
+              </Card>
+            ) : pairs.length === 0 ? (
+              <Card className="p-4">
+                <div className="text-center py-6 text-muted-foreground">
+                  <p className="text-sm">설정된 페어 정류장이 없습니다.</p>
+                  <p className="text-xs mt-1">
+                    페어를 추가하면 두 정류장 간 소요시간을 분석할 수 있습니다.
+                  </p>
+                </div>
+              </Card>
+            ) : (
+              <div className="space-y-3">
+                {pairs.map((pair) => (
+                  <PairAnalysisCard
+                    key={pair.id}
+                    pair={pair}
+                    days={days}
+                    onDelete={handlePairDelete}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
           <ArrivalLogsList
             logs={currentLogs}
             pagination={pagination}
@@ -388,6 +469,15 @@ function StatsContent() {
           />
         </div>
       )}
+
+      {/* 페어 설정 모달 */}
+      <PairSetupModal
+        isOpen={pairModalOpen}
+        onClose={() => setPairModalOpen(false)}
+        onSuccess={fetchPairs}
+        preSelectedBusId={busId || undefined}
+        preSelectedBusNo={busNo}
+      />
     </div>
   );
 }
