@@ -16,6 +16,9 @@ export function PairAnalysisCard({ pair, days, onDelete }: PairAnalysisCardProps
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportContent, setExportContent] = useState('');
+  const [copied, setCopied] = useState(false);
 
   const fetchAnalysis = useCallback(async () => {
     try {
@@ -60,14 +63,29 @@ export function PairAnalysisCard({ pair, days, onDelete }: PairAnalysisCardProps
     }
   };
 
-  const exportToMarkdown = () => {
-    if (!analysis) return;
+  const generateMarkdown = useCallback(() => {
+    if (!analysis) return '';
 
     const now = new Date().toLocaleString('ko-KR');
     const lines: string[] = [
-      `# 페어 정류장 분석 리포트`,
+      `# 페어 정류장 분석 디버그 리포트`,
       ``,
       `> 생성일시: ${now}`,
+      ``,
+      `## 디버그 정보 (ID)`,
+      ``,
+      '```',
+      `pair_id: ${pair.id}`,
+      `bus_id: ${pair.busId}`,
+      `bus_no: ${pair.busNo}`,
+      `station_a_id: ${pair.stationA.id}`,
+      `station_a_name: ${pair.stationA.name}`,
+      `station_a_arsId: ${pair.stationA.arsId || 'null'}`,
+      `station_b_id: ${pair.stationB.id}`,
+      `station_b_name: ${pair.stationB.name}`,
+      `station_b_arsId: ${pair.stationB.arsId || 'null'}`,
+      `analysis_days: ${days}`,
+      '```',
       ``,
       `## 기본 정보`,
       ``,
@@ -135,34 +153,55 @@ export function PairAnalysisCard({ pair, days, onDelete }: PairAnalysisCardProps
     if (analysis.issues && analysis.issues.length > 0) {
       lines.push(`## 상세 이슈 목록`);
       lines.push(``);
-      lines.push(`| 유형 | 정류장 | 시간 | 설명 | 차량번호 |`);
-      lines.push(`|------|--------|------|------|----------|`);
+      lines.push(`| 유형 | 정류장 | 시간 | 설명 | 상세 | 차량번호 |`);
+      lines.push(`|------|--------|------|------|------|----------|`);
 
-      for (const issue of analysis.issues.slice(0, 30)) {
+      for (const issue of analysis.issues) {
         const time = new Date(issue.arrivalTime).toLocaleString('ko-KR');
-        lines.push(`| ${issue.type} | ${issue.station} | ${time} | ${issue.description} | ${issue.plateNo || '-'} |`);
-      }
-
-      if (analysis.issues.length > 30) {
-        lines.push(``);
-        lines.push(`> ... 외 ${analysis.issues.length - 30}건`);
+        lines.push(`| ${issue.type} | ${issue.station} | ${time} | ${issue.description} | ${issue.details || '-'} | ${issue.plateNo || '-'} |`);
       }
       lines.push(``);
     }
 
+    // 디버그용 SQL 쿼리 힌트
+    lines.push(`## 디버그 SQL 쿼리`);
+    lines.push(``);
+    lines.push('```sql');
+    lines.push(`-- A 정류장 도착 기록`);
+    lines.push(`SELECT arrival_time, plate_no FROM bus_arrival_logs`);
+    lines.push(`WHERE bus_id = '${pair.busId}' AND station_id = '${pair.stationA.id}'`);
+    lines.push(`ORDER BY arrival_time DESC LIMIT 20;`);
+    lines.push(``);
+    lines.push(`-- B 정류장 도착 기록`);
+    lines.push(`SELECT arrival_time, plate_no FROM bus_arrival_logs`);
+    lines.push(`WHERE bus_id = '${pair.busId}' AND station_id = '${pair.stationB.id}'`);
+    lines.push(`ORDER BY arrival_time DESC LIMIT 20;`);
+    lines.push(``);
+    lines.push(`-- 페어 설정 확인`);
+    lines.push(`SELECT * FROM station_pairs WHERE id = '${pair.id}';`);
+    lines.push('```');
+    lines.push(``);
     lines.push(`---`);
-    lines.push(`*Bus Finder 페어 분석 리포트*`);
+    lines.push(`*Bus Finder 페어 분석 디버그 리포트*`);
 
-    const content = lines.join('\n');
-    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `pair-analysis-${pair.busNo}-${new Date().toISOString().slice(0, 10)}.md`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    return lines.join('\n');
+  }, [analysis, pair, days]);
+
+  const openExportModal = () => {
+    const content = generateMarkdown();
+    setExportContent(content);
+    setShowExportModal(true);
+    setCopied(false);
+  };
+
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(exportContent);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      alert('복사에 실패했습니다.');
+    }
   };
 
   if (loading) {
@@ -215,12 +254,12 @@ export function PairAnalysisCard({ pair, days, onDelete }: PairAnalysisCardProps
             variant="ghost"
             size="sm"
             className="text-muted-foreground hover:text-primary"
-            onClick={exportToMarkdown}
-            aria-label="Markdown으로 내보내기"
-            title="MD 내보내기"
+            onClick={openExportModal}
+            aria-label="디버그 리포트 보기"
+            title="디버그 리포트"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
           </Button>
           <Button
@@ -370,6 +409,44 @@ export function PairAnalysisCard({ pair, days, onDelete }: PairAnalysisCardProps
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* 디버그 리포트 모달 */}
+      {showExportModal && (
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+          onClick={() => setShowExportModal(false)}
+        >
+          <div
+            className="bg-background rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="font-semibold">디버그 리포트</h3>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant={copied ? 'default' : 'outline'}
+                  onClick={copyToClipboard}
+                >
+                  {copied ? '✓ 복사됨' : '📋 복사'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setShowExportModal(false)}
+                >
+                  ✕
+                </Button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto p-4">
+              <pre className="text-xs font-mono whitespace-pre-wrap bg-muted p-3 rounded-lg">
+                {exportContent}
+              </pre>
+            </div>
+          </div>
         </div>
       )}
     </Card>
