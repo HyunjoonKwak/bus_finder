@@ -23,9 +23,18 @@ interface ArrivalInfo {
   leftStation: number;
 }
 
+// API 응답 타입
+interface BusArrivalResponse {
+  routeId?: string;
+  routeName?: string;
+  predictTime1?: number;
+  locationNo1?: number;
+}
+
 interface TargetWithArrival extends TrackingTarget {
   arrival?: ArrivalInfo;
   lastChecked?: Date;
+  error?: string;
 }
 
 const REFRESH_OPTIONS = [
@@ -42,6 +51,7 @@ export default function TrackingPage() {
   const router = useRouter();
   const [targets, setTargets] = useState<TargetWithArrival[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [refreshInterval, setRefreshInterval] = useState(DEFAULT_REFRESH_INTERVAL);
   const [countdown, setCountdown] = useState(DEFAULT_REFRESH_INTERVAL);
   const [collecting, setCollecting] = useState(false);
@@ -66,11 +76,18 @@ export default function TrackingPage() {
 
   const fetchTargets = async () => {
     try {
+      setError(null);
       const response = await fetch('/api/tracking/targets');
+
+      if (!response.ok) {
+        throw new Error('추적 대상을 불러오는데 실패했습니다.');
+      }
+
       const data = await response.json();
       setTargets(data.targets || []);
-    } catch (error) {
-      console.error('Fetch targets error:', error);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -88,6 +105,7 @@ export default function TrackingPage() {
       return;
     }
 
+    // 정류소별로 그룹핑
     const stationMap = new Map<string, TargetWithArrival[]>();
     for (const target of activeTargets) {
       const key = `${target.station_id}|${target.ars_id || ''}`;
@@ -98,51 +116,69 @@ export default function TrackingPage() {
 
     const updatedTargets = [...currentTargets];
 
-    for (const [stationKey, stationTargets] of stationMap) {
-      try {
-        const [stationId, arsId] = stationKey.split('|');
-        const params = new URLSearchParams({ stationId });
-        if (arsId) params.append('arsId', arsId);
+    // 병렬로 API 호출
+    const fetchPromises = Array.from(stationMap.entries()).map(
+      async ([stationKey, stationTargets]) => {
+        try {
+          const [stationId, arsId] = stationKey.split('|');
+          const params = new URLSearchParams({ stationId });
+          if (arsId) params.append('arsId', arsId);
 
-        const response = await fetch(`/api/bus/arrival?${params.toString()}`);
-        const data = await response.json();
-        const arrivals = data.arrivals || [];
+          const response = await fetch(`/api/bus/arrival?${params.toString()}`);
 
-        for (const target of stationTargets) {
-          interface ArrivalInfo {
-            routeId?: string;
-            routeName?: string;
-            predictTime1?: number;
-            locationNo1?: number;
+          if (!response.ok) {
+            throw new Error(`API 오류: ${response.status}`);
           }
-          const busArrival = arrivals.find((a: ArrivalInfo) => {
-            const aRouteId = String(a.routeId || '');
-            const aRouteName = String(a.routeName || '');
-            const tBusId = String(target.bus_id || '');
-            const tBusNo = String(target.bus_no || '');
-            return (
-              aRouteId === tBusId ||
-              aRouteName === tBusNo ||
-              aRouteName.replace(/\s/g, '') === tBusNo.replace(/\s/g, '')
-            );
-          });
 
-          const targetIndex = updatedTargets.findIndex((t) => t.id === target.id);
-          if (targetIndex >= 0) {
-            updatedTargets[targetIndex] = {
-              ...updatedTargets[targetIndex],
-              arrival: busArrival ? {
-                arrivalSec: busArrival.predictTime1 ? busArrival.predictTime1 * 60 : 0,
-                leftStation: busArrival.locationNo1 || 0,
-              } : undefined,
-              lastChecked: new Date(),
-            };
+          const data = await response.json();
+          const arrivals: BusArrivalResponse[] = data.arrivals || [];
+
+          for (const target of stationTargets) {
+            const busArrival = arrivals.find((a) => {
+              const aRouteId = String(a.routeId || '');
+              const aRouteName = String(a.routeName || '');
+              const tBusId = String(target.bus_id || '');
+              const tBusNo = String(target.bus_no || '');
+              return (
+                aRouteId === tBusId ||
+                aRouteName === tBusNo ||
+                aRouteName.replace(/\s/g, '') === tBusNo.replace(/\s/g, '')
+              );
+            });
+
+            const targetIndex = updatedTargets.findIndex((t) => t.id === target.id);
+            if (targetIndex >= 0) {
+              updatedTargets[targetIndex] = {
+                ...updatedTargets[targetIndex],
+                arrival: busArrival
+                  ? {
+                      arrivalSec: busArrival.predictTime1 ? busArrival.predictTime1 * 60 : 0,
+                      leftStation: busArrival.locationNo1 || 0,
+                    }
+                  : undefined,
+                lastChecked: new Date(),
+                error: undefined,
+              };
+            }
+          }
+        } catch (err) {
+          // 해당 정류소의 타겟들에 에러 표시
+          for (const target of stationTargets) {
+            const targetIndex = updatedTargets.findIndex((t) => t.id === target.id);
+            if (targetIndex >= 0) {
+              updatedTargets[targetIndex] = {
+                ...updatedTargets[targetIndex],
+                error: '도착 정보를 가져올 수 없습니다.',
+                lastChecked: new Date(),
+              };
+            }
           }
         }
-      } catch (error) {
-        console.error(`Station fetch error:`, error);
       }
-    }
+    );
+
+    // 모든 요청 완료 대기
+    await Promise.all(fetchPromises);
 
     setTargets(updatedTargets);
     setCollecting(false);
@@ -150,13 +186,17 @@ export default function TrackingPage() {
 
   // localStorage에서 리프레시 간격 로드
   useEffect(() => {
-    const savedRefresh = localStorage.getItem('tracking_refresh_interval');
-    if (savedRefresh) {
-      const interval = parseInt(savedRefresh);
-      if (!isNaN(interval)) {
-        setRefreshInterval(interval);
-        setCountdown(interval || DEFAULT_REFRESH_INTERVAL);
+    try {
+      const savedRefresh = localStorage.getItem('tracking_refresh_interval');
+      if (savedRefresh) {
+        const interval = parseInt(savedRefresh);
+        if (!isNaN(interval) && interval >= 0) {
+          setRefreshInterval(interval);
+          setCountdown(interval || DEFAULT_REFRESH_INTERVAL);
+        }
       }
+    } catch {
+      // localStorage 접근 불가 (시크릿 모드 등)
     }
   }, []);
 
@@ -198,14 +238,19 @@ export default function TrackingPage() {
 
   const handleToggle = async (target: TrackingTarget) => {
     try {
-      await fetch('/api/tracking/targets', {
+      const response = await fetch('/api/tracking/targets', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: target.id, is_active: !target.is_active }),
       });
+
+      if (!response.ok) {
+        throw new Error('상태 변경에 실패했습니다.');
+      }
+
       fetchTargets();
-    } catch (error) {
-      console.error('Toggle target error:', error);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
     }
   };
 
@@ -213,10 +258,15 @@ export default function TrackingPage() {
     if (!confirm('이 추적 대상을 삭제하시겠습니까?')) return;
 
     try {
-      await fetch(`/api/tracking/targets?id=${id}`, { method: 'DELETE' });
+      const response = await fetch(`/api/tracking/targets?id=${id}`, { method: 'DELETE' });
+
+      if (!response.ok) {
+        throw new Error('삭제에 실패했습니다.');
+      }
+
       fetchTargets();
-    } catch (error) {
-      console.error('Delete target error:', error);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '삭제 중 오류가 발생했습니다.');
     }
   };
 
@@ -241,13 +291,26 @@ export default function TrackingPage() {
   const handleRefreshIntervalChange = (interval: number) => {
     setRefreshInterval(interval);
     setCountdown(interval || DEFAULT_REFRESH_INTERVAL);
-    localStorage.setItem('tracking_refresh_interval', interval.toString());
+    try {
+      localStorage.setItem('tracking_refresh_interval', interval.toString());
+    } catch {
+      // localStorage 접근 불가
+    }
   };
 
   const formatArrivalTime = (sec: number) => {
     if (sec < 60) return '곧 도착';
     const min = Math.floor(sec / 60);
     return `${min}분`;
+  };
+
+  const getArrivalStatus = (sec: number): { label: string; className: string } => {
+    if (sec <= 120) {
+      return { label: '임박', className: 'text-red-500' };
+    } else if (sec <= 300) {
+      return { label: '곧', className: 'text-amber-500' };
+    }
+    return { label: '', className: 'text-primary' };
   };
 
   const formatLastCollected = (date: Date | null) => {
@@ -259,9 +322,43 @@ export default function TrackingPage() {
     return (
       <div className="px-4 py-4">
         <h1 className="text-xl font-bold text-foreground mb-4">버스 도착 추적</h1>
-        <div className="flex justify-center py-16">
+        <div className="flex justify-center py-16" role="status" aria-label="로딩 중">
           <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
         </div>
+      </div>
+    );
+  }
+
+  // 에러 UI
+  if (error) {
+    return (
+      <div className="px-4 py-4">
+        <h1 className="text-xl font-bold text-foreground mb-4">버스 도착 추적</h1>
+        <Card className="p-6 bg-destructive/10 border-destructive/30">
+          <div className="flex flex-col items-center text-center">
+            <svg
+              className="w-12 h-12 text-destructive mb-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              />
+            </svg>
+            <h2 className="text-lg font-semibold text-destructive mb-2">
+              데이터를 불러올 수 없습니다
+            </h2>
+            <p className="text-sm text-muted-foreground mb-4">{error}</p>
+            <Button onClick={fetchTargets} variant="outline">
+              다시 시도
+            </Button>
+          </div>
+        </Card>
       </div>
     );
   }
@@ -278,6 +375,8 @@ export default function TrackingPage() {
             size="sm"
             onClick={handleToggleBgCollection}
             disabled={bgLoading}
+            aria-pressed={bgCollecting}
+            aria-label={bgCollecting ? '자동수집 끄기' : '자동수집 켜기'}
           >
             {bgLoading ? '로딩...' : bgCollecting ? '자동수집 ON' : '자동수집 OFF'}
           </Button>
@@ -286,10 +385,16 @@ export default function TrackingPage() {
 
       {/* 백그라운드 수집 상태 */}
       {bgCollecting && (
-        <Card className="p-3 mb-4 bg-green-500/10 border-green-500/30">
+        <Card
+          className="p-3 mb-4 bg-green-500/10 border-green-500/30"
+          role="status"
+          aria-live="polite"
+        >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-green-700 dark:text-green-400">자동 수집 활성화</p>
+              <p className="text-sm font-medium text-green-700 dark:text-green-400">
+                자동 수집 활성화
+              </p>
               <p className="text-xs text-green-600/70 dark:text-green-400/70 mt-1">
                 {schedulerStatus?.dbSettings
                   ? `${schedulerStatus.dbSettings.intervalMinutes}분 간격 (${schedulerStatus.dbSettings.startHour}:00~${schedulerStatus.dbSettings.endHour === 24 ? '24:00' : schedulerStatus.dbSettings.endHour + ':00'})`
@@ -309,7 +414,7 @@ export default function TrackingPage() {
           {schedulerStatus?.activeTimers !== undefined && schedulerStatus.activeTimers > 0 && (
             <div className="mt-2 pt-2 border-t border-green-500/20">
               <p className="text-xs text-green-600/70 dark:text-green-400/70">
-                ⏱️ 활성 타이머: {schedulerStatus.activeTimers}개
+                <span aria-hidden="true">⏱️</span> 활성 타이머: {schedulerStatus.activeTimers}개
               </p>
             </div>
           )}
@@ -318,12 +423,15 @@ export default function TrackingPage() {
 
       {/* 최근 자동 수집 기록 */}
       {bgLogs.length > 0 && (
-        <Card className="p-3 mb-4">
-          <p className="text-sm font-medium text-foreground mb-2">최근 자동 수집 기록</p>
+        <Card className="p-3 mb-4" role="region" aria-labelledby="recent-logs-heading">
+          <p id="recent-logs-heading" className="text-sm font-medium text-foreground mb-2">
+            최근 자동 수집 기록
+          </p>
           <div className="space-y-1">
             {bgLogs.slice(0, 3).map((log, idx) => (
               <p key={idx} className="text-xs text-muted-foreground">
-                {log.bus_no}번 @ {log.station_name} - {new Date(log.arrival_time).toLocaleTimeString('ko-KR')}
+                {log.bus_no}번 @ {log.station_name} -{' '}
+                {new Date(log.arrival_time).toLocaleTimeString('ko-KR')}
               </p>
             ))}
           </div>
@@ -333,20 +441,27 @@ export default function TrackingPage() {
       {/* 실시간 도착 정보 */}
       {activeTargets.length > 0 && (
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold text-foreground">실시간 도착 정보</h3>
+          <h2 className="font-semibold text-foreground">실시간 도착 정보</h2>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             {collecting ? (
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              <div className="flex items-center gap-2" role="status" aria-live="polite">
+                <div
+                  className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin"
+                  aria-hidden="true"
+                />
                 <span>확인 중...</span>
               </div>
             ) : (
               <>
+                <label htmlFor="refresh-interval" className="sr-only">
+                  새로고침 간격 선택
+                </label>
                 <select
+                  id="refresh-interval"
                   value={refreshInterval}
                   onChange={(e) => handleRefreshIntervalChange(parseInt(e.target.value))}
-                  className="text-xs border rounded px-2 py-1 bg-background"
-                  title="새로고침 간격"
+                  className="text-xs border rounded px-2 py-1 bg-background min-h-[32px]"
+                  aria-label="새로고침 간격"
                 >
                   {REFRESH_OPTIONS.map((opt) => (
                     <option key={opt.value} value={opt.value}>
@@ -355,7 +470,9 @@ export default function TrackingPage() {
                   ))}
                 </select>
                 {refreshInterval > 0 && (
-                  <span className="text-xs">{countdown}초</span>
+                  <span className="text-xs" aria-live="polite">
+                    {countdown}초
+                  </span>
                 )}
                 <Button
                   variant="ghost"
@@ -364,6 +481,9 @@ export default function TrackingPage() {
                     checkArrivals();
                     setCountdown(refreshInterval || DEFAULT_REFRESH_INTERVAL);
                   }}
+                  disabled={collecting}
+                  aria-label="도착 정보 새로고침"
+                  className="min-h-[44px] min-w-[44px]"
                 >
                   새로고침
                 </Button>
@@ -380,6 +500,7 @@ export default function TrackingPage() {
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
+            aria-hidden="true"
           >
             <path
               strokeLinecap="round"
@@ -392,79 +513,100 @@ export default function TrackingPage() {
           <p className="text-sm text-muted-foreground/70 mb-4">
             정류소 상세 페이지에서 버스를 추적 대상으로 추가하세요.
           </p>
-          <Button onClick={() => router.push('/station/search')}>
-            정류소 검색
-          </Button>
+          <Button onClick={() => router.push('/station/search')}>정류소 검색</Button>
         </div>
       ) : (
-        <div className="space-y-3">
-          {targets.map((target) => (
-              <Card key={target.id} className="p-4">
+        <div className="space-y-3" role="list" aria-label="추적 대상 버스 목록">
+          {targets.map((target) => {
+            const arrivalStatus = target.arrival ? getArrivalStatus(target.arrival.arrivalSec) : null;
+
+            return (
+              <Card
+                key={target.id}
+                className="p-4"
+                role="listitem"
+                aria-label={`${target.bus_no}번 버스, ${target.station_name} 정류소`}
+              >
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="font-bold text-lg text-primary">
-                        {target.bus_no}
-                      </span>
+                      <span className="font-bold text-lg text-primary">{target.bus_no}</span>
                       <Badge variant={target.is_active ? 'default' : 'secondary'}>
                         {target.is_active ? '활성' : '비활성'}
                       </Badge>
                     </div>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {target.station_name}
-                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">{target.station_name}</p>
 
                     {/* 실시간 도착 정보 */}
                     {target.is_active && target.arrival && (
                       <div className="mt-2 flex items-center gap-2">
-                        <span
-                          className={`text-lg font-bold ${
-                            target.arrival.arrivalSec <= 120
-                              ? 'text-red-500'
-                              : target.arrival.arrivalSec <= 300
-                              ? 'text-amber-500'
-                              : 'text-primary'
-                          }`}
-                        >
+                        <span className={`text-lg font-bold ${arrivalStatus?.className}`}>
                           {formatArrivalTime(target.arrival.arrivalSec)}
                         </span>
+                        {/* 색상 외 텍스트로도 상태 표시 (접근성) */}
+                        {arrivalStatus?.label && (
+                          <Badge
+                            variant="outline"
+                            className={
+                              arrivalStatus.label === '임박'
+                                ? 'border-red-500 text-red-500'
+                                : 'border-amber-500 text-amber-500'
+                            }
+                          >
+                            {arrivalStatus.label}
+                          </Badge>
+                        )}
                         <span className="text-xs text-muted-foreground">
                           ({target.arrival.leftStation}정류장 전)
                         </span>
                       </div>
                     )}
-                    {target.is_active && !target.arrival && target.lastChecked && (
-                      <p className="text-xs text-muted-foreground mt-2">
-                        도착 정보 없음
-                      </p>
+                    {target.is_active && target.error && (
+                      <p className="text-xs text-destructive mt-2">{target.error}</p>
+                    )}
+                    {target.is_active && !target.arrival && !target.error && target.lastChecked && (
+                      <p className="text-xs text-muted-foreground mt-2">도착 정보 없음</p>
                     )}
                   </div>
 
                   <div className="flex gap-1">
                     <button
                       onClick={() => handleToggle(target)}
-                      className="p-2 text-muted-foreground hover:text-foreground"
-                      title={target.is_active ? '비활성화' : '활성화'}
+                      className="p-2 text-muted-foreground hover:text-foreground min-w-[44px] min-h-[44px] flex items-center justify-center"
+                      aria-label={target.is_active ? '추적 비활성화' : '추적 활성화'}
+                      aria-pressed={target.is_active}
                     >
                       {target.is_active ? (
-                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                        <svg
+                          className="w-5 h-5"
+                          fill="currentColor"
+                          viewBox="0 0 24 24"
+                          aria-hidden="true"
+                        >
                           <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" />
                         </svg>
                       ) : (
-                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                        <svg
+                          className="w-5 h-5"
+                          fill="currentColor"
+                          viewBox="0 0 24 24"
+                          aria-hidden="true"
+                        >
                           <path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z" />
                         </svg>
                       )}
                     </button>
                     <button
                       onClick={() => handleDelete(target.id)}
-                      className="p-2 text-muted-foreground hover:text-destructive"
+                      className="p-2 text-muted-foreground hover:text-destructive min-w-[44px] min-h-[44px] flex items-center justify-center"
+                      aria-label={`${target.bus_no}번 버스 추적 삭제`}
                     >
                       <svg
                         className="w-5 h-5"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
+                        aria-hidden="true"
                       >
                         <path
                           strokeLinecap="round"
@@ -488,13 +630,15 @@ export default function TrackingPage() {
                   </Button>
                 </div>
               </Card>
-          ))}
+            );
+          })}
         </div>
       )}
 
       {/* 도움말 */}
       <p className="text-xs text-muted-foreground text-center mt-6">
-        💡 정류소 상세 페이지에서 버스를 추적 대상으로 추가할 수 있습니다.
+        <span aria-hidden="true">💡</span> 정류소 상세 페이지에서 버스를 추적 대상으로 추가할 수
+        있습니다.
       </p>
     </div>
   );
