@@ -25,19 +25,67 @@ function calculateStdDeviation(values: number[]): number | null {
 }
 
 // 주중/주말 통계 계산 헬퍼
-function calculateWeekdayWeekendStats(times: number[]): WeekdayWeekendStats | null {
+function calculateWeekdayWeekendStats(
+  times: number[],
+  intervals: number[],
+  dayCount: number
+): WeekdayWeekendStats | null {
   if (times.length === 0) return null;
 
-  const avgMinutes = Math.round(times.reduce((a, b) => a + b, 0) / times.length);
   const minTime = Math.min(...times);
   const maxTime = Math.max(...times);
+  const avgInterval = intervals.length > 0
+    ? Math.round(intervals.reduce((a, b) => a + b, 0) / intervals.length)
+    : null;
+  const dailyAvgCount = dayCount > 0 ? Math.round((times.length / dayCount) * 10) / 10 : null;
 
   return {
     count: times.length,
-    avgTime: minutesToTimeStr(avgMinutes),
+    avgInterval,
+    dailyAvgCount,
     firstArrival: minutesToTimeStr(minTime),
     lastArrival: minutesToTimeStr(maxTime),
   };
+}
+
+// 날짜별 도착 기록을 그룹화하고 배차간격 계산
+function calculateIntervalsFromLogs(
+  logs: { arrival_time: string; day_of_week: number }[]
+): { byDay: Map<number, number[]>; byDate: Map<string, Date[]> } {
+  const byDate = new Map<string, Date[]>();
+
+  for (const log of logs) {
+    const date = new Date(log.arrival_time);
+    const dateKey = date.toISOString().split('T')[0];
+    const existing = byDate.get(dateKey) || [];
+    existing.push(date);
+    byDate.set(dateKey, existing);
+  }
+
+  // 날짜별로 배차간격 계산
+  const byDay = new Map<number, number[]>(); // day_of_week -> intervals[]
+
+  for (const [dateKey, dates] of byDate) {
+    if (dates.length < 2) continue;
+
+    // 시간순 정렬
+    dates.sort((a, b) => a.getTime() - b.getTime());
+    const dayOfWeek = dates[0].getDay();
+
+    const dayIntervals = byDay.get(dayOfWeek) || [];
+
+    for (let i = 1; i < dates.length; i++) {
+      const diffMinutes = (dates[i].getTime() - dates[i - 1].getTime()) / (1000 * 60);
+      // 5분 ~ 120분 사이의 간격만 유효한 배차간격으로 인정
+      if (diffMinutes >= 5 && diffMinutes <= 120) {
+        dayIntervals.push(diffMinutes);
+      }
+    }
+
+    byDay.set(dayOfWeek, dayIntervals);
+  }
+
+  return { byDay, byDate };
 }
 
 // GET: 버스 도착 통계 조회
@@ -105,15 +153,12 @@ export async function GET(request: NextRequest) {
       return ApiErrors.internalError('통계 조회에 실패했습니다.', allLogsError.message);
     }
 
+    // 배차간격 계산
+    const { byDay: intervalsByDay, byDate: logsByDate } = calculateIntervalsFromLogs(allLogs);
+
     // 요일별 통계 초기화
     const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
-    byDay = dayNames.map((name, i) => ({
-      day: i,
-      dayName: name,
-      count: 0,
-      times: [] as string[],
-      avgTime: null,
-    }));
+    const dayTimesMap = new Map<number, number[]>(); // day -> times in minutes
 
     // 시간대별 통계 초기화
     byHour = Array.from({ length: 24 }, (_, i) => ({
@@ -124,38 +169,62 @@ export async function GET(request: NextRequest) {
     const times: number[] = [];
     const weekdayTimes: number[] = []; // 월~금 (1~5)
     const weekendTimes: number[] = []; // 토,일 (0, 6)
+    const weekdayIntervals: number[] = [];
+    const weekendIntervals: number[] = [];
+    const weekdayDates = new Set<string>();
+    const weekendDates = new Set<string>();
 
     allLogs.forEach((log) => {
       const date = new Date(log.arrival_time);
       const kstDate = toKST(date);
       const dayOfWeek = log.day_of_week;
       const hour = kstDate.getUTCHours();
-      const timeStr = `${kstDate.getUTCHours().toString().padStart(2, '0')}:${kstDate.getUTCMinutes().toString().padStart(2, '0')}`;
       const timeMinutes = kstDate.getUTCHours() * 60 + kstDate.getUTCMinutes();
+      const dateKey = date.toISOString().split('T')[0];
 
-      byDay[dayOfWeek].count++;
-      byDay[dayOfWeek].times.push(timeStr);
+      // 요일별 시간 기록
+      const dayTimes = dayTimesMap.get(dayOfWeek) || [];
+      dayTimes.push(timeMinutes);
+      dayTimesMap.set(dayOfWeek, dayTimes);
+
       byHour[hour].count++;
       times.push(timeMinutes);
 
       // 주중/주말 분류
       if (dayOfWeek >= 1 && dayOfWeek <= 5) {
         weekdayTimes.push(timeMinutes);
+        weekdayDates.add(dateKey);
       } else {
         weekendTimes.push(timeMinutes);
+        weekendDates.add(dateKey);
       }
     });
 
-    // 요일별 평균 시간 계산
-    byDay.forEach((day) => {
-      if (day.times.length > 0) {
-        const totalMinutes = day.times.reduce((sum, time) => {
-          const [h, m] = time.split(':').map(Number);
-          return sum + h * 60 + m;
-        }, 0);
-        const avgMinutes = Math.round(totalMinutes / day.times.length);
-        day.avgTime = minutesToTimeStr(avgMinutes);
+    // 주중/주말 배차간격 수집
+    for (const [dayOfWeek, intervals] of intervalsByDay) {
+      if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+        weekdayIntervals.push(...intervals);
+      } else {
+        weekendIntervals.push(...intervals);
       }
+    }
+
+    // 요일별 통계 생성
+    byDay = dayNames.map((name, i) => {
+      const dayTimes = dayTimesMap.get(i) || [];
+      const dayIntervals = intervalsByDay.get(i) || [];
+      const avgInterval = dayIntervals.length > 0
+        ? Math.round(dayIntervals.reduce((a, b) => a + b, 0) / dayIntervals.length)
+        : null;
+
+      return {
+        day: i,
+        dayName: name,
+        count: dayTimes.length,
+        avgInterval,
+        firstTime: dayTimes.length > 0 ? minutesToTimeStr(Math.min(...dayTimes)) : null,
+        lastTime: dayTimes.length > 0 ? minutesToTimeStr(Math.max(...dayTimes)) : null,
+      };
     });
 
     // 가장 이른/늦은 도착 시간
@@ -170,36 +239,16 @@ export async function GET(request: NextRequest) {
     }
 
     // 주중/주말 통계 계산
-    weekdayStats = calculateWeekdayWeekendStats(weekdayTimes);
-    weekendStats = calculateWeekdayWeekendStats(weekendTimes);
+    weekdayStats = calculateWeekdayWeekendStats(weekdayTimes, weekdayIntervals, weekdayDates.size);
+    weekendStats = calculateWeekdayWeekendStats(weekendTimes, weekendIntervals, weekendDates.size);
 
-    // 평균 배차간격 계산 (같은 날 기록들 사이의 간격)
-    if (allLogs.length >= 2) {
-      const logsByDate = new Map<string, Date[]>();
-      allLogs.forEach((log) => {
-        const date = new Date(log.arrival_time);
-        const dateKey = date.toISOString().split('T')[0];
-        const existing = logsByDate.get(dateKey) || [];
-        existing.push(date);
-        logsByDate.set(dateKey, existing);
-      });
-
-      const intervals: number[] = [];
-      logsByDate.forEach((dates) => {
-        if (dates.length >= 2) {
-          dates.sort((a, b) => a.getTime() - b.getTime());
-          for (let i = 1; i < dates.length; i++) {
-            const diffMinutes = (dates[i].getTime() - dates[i - 1].getTime()) / (1000 * 60);
-            if (diffMinutes >= 5 && diffMinutes <= 120) {
-              intervals.push(diffMinutes);
-            }
-          }
-        }
-      });
-
-      if (intervals.length > 0) {
-        avgInterval = Math.round(intervals.reduce((a, b) => a + b, 0) / intervals.length);
-      }
+    // 전체 평균 배차간격 계산
+    const allIntervals: number[] = [];
+    for (const intervals of intervalsByDay.values()) {
+      allIntervals.push(...intervals);
+    }
+    if (allIntervals.length > 0) {
+      avgInterval = Math.round(allIntervals.reduce((a, b) => a + b, 0) / allIntervals.length);
     }
   }
 

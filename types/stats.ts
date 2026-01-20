@@ -6,8 +6,9 @@ export interface DayStats {
   day: number;
   dayName: string;
   count: number;
-  times: string[];
-  avgTime: string | null;
+  avgInterval: number | null;  // 평균 배차간격 (분)
+  firstTime: string | null;    // 첫 도착 시간
+  lastTime: string | null;     // 마지막 도착 시간
 }
 
 export interface HourStats {
@@ -28,7 +29,8 @@ export interface ArrivalLog {
 
 export interface WeekdayWeekendStats {
   count: number;
-  avgTime: string | null;
+  avgInterval: number | null;    // 평균 배차간격 (분)
+  dailyAvgCount: number | null;  // 일평균 도착 횟수
   firstArrival: string | null;
   lastArrival: string | null;
 }
