@@ -28,57 +28,6 @@ interface TargetWithArrival extends TrackingTarget {
   lastChecked?: Date;
 }
 
-interface Recommendation {
-  targetId: string;
-  busNo: string;
-  stationName: string;
-  recommendation: {
-    departureTime: string;
-    arrivalTime: string;
-    confidence: 'high' | 'medium' | 'low';
-    basis: string;
-    dataPoints: number;
-  } | null;
-  pattern: {
-    avgTime: string;
-    earliestTime: string;
-    latestTime: string;
-    stdDevMinutes: number;
-  } | null;
-}
-
-interface RecommendationData {
-  recommendations: Recommendation[];
-  today: {
-    dayOfWeek: number;
-    dayName: string;
-    date: string;
-  };
-}
-
-interface CommuteSettings {
-  enabled: boolean;
-  morningStart: string; // HH:MM
-  morningEnd: string;
-  eveningStart: string;
-  eveningEnd: string;
-  activeWindow: 'morning' | 'evening' | 'all';
-}
-
-const DEFAULT_COMMUTE_SETTINGS: CommuteSettings = {
-  enabled: false,
-  morningStart: '07:00',
-  morningEnd: '09:00',
-  eveningStart: '17:00',
-  eveningEnd: '19:00',
-  activeWindow: 'all',
-};
-
-const timeToMinutes = (time: string): number => {
-  const [hours, mins] = time.split(':').map(Number);
-  return hours * 60 + mins;
-};
-
 const REFRESH_OPTIONS = [
   { value: 30, label: '30초' },
   { value: 60, label: '1분' },
@@ -92,16 +41,11 @@ const DEFAULT_REFRESH_INTERVAL = 30;
 export default function TrackingPage() {
   const router = useRouter();
   const [targets, setTargets] = useState<TargetWithArrival[]>([]);
-  const [recommendations, setRecommendations] = useState<RecommendationData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [loadingRec, setLoadingRec] = useState(true);
   const [refreshInterval, setRefreshInterval] = useState(DEFAULT_REFRESH_INTERVAL);
   const [countdown, setCountdown] = useState(DEFAULT_REFRESH_INTERVAL);
   const [collecting, setCollecting] = useState(false);
   const [notificationEnabled, setNotificationEnabled] = useState(false);
-  const [bufferMinutes, setBufferMinutes] = useState(5);
-  const [commuteSettings, setCommuteSettings] = useState<CommuteSettings>(DEFAULT_COMMUTE_SETTINGS);
-  const [showCommuteSettings, setShowCommuteSettings] = useState(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const targetsRef = useRef<TargetWithArrival[]>([]);
 
@@ -128,32 +72,6 @@ export default function TrackingPage() {
       console.error('Fetch targets error:', error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchRecommendations = async () => {
-    try {
-      setLoadingRec(true);
-      const params = new URLSearchParams({ bufferMinutes: bufferMinutes.toString() });
-
-      // 시간대 필터 적용
-      if (commuteSettings.enabled && commuteSettings.activeWindow !== 'all') {
-        if (commuteSettings.activeWindow === 'morning') {
-          params.append('timeWindowStart', timeToMinutes(commuteSettings.morningStart).toString());
-          params.append('timeWindowEnd', timeToMinutes(commuteSettings.morningEnd).toString());
-        } else if (commuteSettings.activeWindow === 'evening') {
-          params.append('timeWindowStart', timeToMinutes(commuteSettings.eveningStart).toString());
-          params.append('timeWindowEnd', timeToMinutes(commuteSettings.eveningEnd).toString());
-        }
-      }
-
-      const response = await fetch(`/api/tracking/recommend?${params.toString()}`);
-      const data = await response.json();
-      setRecommendations(data);
-    } catch (error) {
-      console.error('Fetch recommendations error:', error);
-    } finally {
-      setLoadingRec(false);
     }
   };
 
@@ -229,16 +147,8 @@ export default function TrackingPage() {
     setCollecting(false);
   }, []);
 
-  // localStorage에서 출퇴근 설정 및 리프레시 간격 로드
+  // localStorage에서 리프레시 간격 로드
   useEffect(() => {
-    const savedCommute = localStorage.getItem('commuteSettings');
-    if (savedCommute) {
-      try {
-        setCommuteSettings(JSON.parse(savedCommute));
-      } catch {
-        // ignore
-      }
-    }
     const savedRefresh = localStorage.getItem('tracking_refresh_interval');
     if (savedRefresh) {
       const interval = parseInt(savedRefresh);
@@ -249,28 +159,13 @@ export default function TrackingPage() {
     }
   }, []);
 
-  // 출퇴근 설정 변경 시 localStorage에 저장
-  useEffect(() => {
-    localStorage.setItem('commuteSettings', JSON.stringify(commuteSettings));
-  }, [commuteSettings]);
-
   useEffect(() => {
     fetchTargets();
-    fetchRecommendations();
 
     if ('Notification' in window) {
       setNotificationEnabled(Notification.permission === 'granted');
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // 출퇴근 설정 변경 시 추천 다시 가져오기
-  useEffect(() => {
-    if (!loading) {
-      fetchRecommendations();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [commuteSettings.enabled, commuteSettings.activeWindow]);
 
   useEffect(() => {
     if (loading) return;
@@ -319,7 +214,6 @@ export default function TrackingPage() {
     try {
       await fetch(`/api/tracking/targets?id=${id}`, { method: 'DELETE' });
       fetchTargets();
-      fetchRecommendations();
     } catch (error) {
       console.error('Delete target error:', error);
     }
@@ -346,7 +240,6 @@ export default function TrackingPage() {
 
       if (response.ok) {
         alert('도착 시간이 기록되었습니다.');
-        fetchRecommendations(); // 추천 갱신
       }
     } catch (error) {
       console.error('Log arrival error:', error);
@@ -365,31 +258,10 @@ export default function TrackingPage() {
     }
   };
 
-  const handleBufferChange = (minutes: number) => {
-    setBufferMinutes(minutes);
-    setTimeout(() => fetchRecommendations(), 100);
-  };
-
-  const handleCommuteSettingsChange = (updates: Partial<CommuteSettings>) => {
-    setCommuteSettings(prev => ({ ...prev, ...updates }));
-  };
-
   const handleRefreshIntervalChange = (interval: number) => {
     setRefreshInterval(interval);
     setCountdown(interval || DEFAULT_REFRESH_INTERVAL);
     localStorage.setItem('tracking_refresh_interval', interval.toString());
-  };
-
-  const getCurrentTimeWindow = (): string => {
-    if (!commuteSettings.enabled) return '전체';
-    switch (commuteSettings.activeWindow) {
-      case 'morning':
-        return `출근 ${commuteSettings.morningStart}~${commuteSettings.morningEnd}`;
-      case 'evening':
-        return `퇴근 ${commuteSettings.eveningStart}~${commuteSettings.eveningEnd}`;
-      default:
-        return '전체';
-    }
   };
 
   const formatArrivalTime = (sec: number) => {
@@ -401,21 +273,6 @@ export default function TrackingPage() {
   const formatLastCollected = (date: Date | null) => {
     if (!date) return '';
     return date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
-  };
-
-  const getConfidenceBadge = (confidence: 'high' | 'medium' | 'low') => {
-    switch (confidence) {
-      case 'high':
-        return <Badge className="bg-green-500 hover:bg-green-600">높음</Badge>;
-      case 'medium':
-        return <Badge className="bg-amber-500 hover:bg-amber-600">보통</Badge>;
-      case 'low':
-        return <Badge variant="secondary">낮음</Badge>;
-    }
-  };
-
-  const getRecommendation = (targetId: string) => {
-    return recommendations?.recommendations.find(r => r.targetId === targetId);
   };
 
   if (loading) {
@@ -430,7 +287,6 @@ export default function TrackingPage() {
   }
 
   const activeTargets = targets.filter((t) => t.is_active);
-  const hasRecommendations = recommendations?.recommendations.some(r => r.recommendation !== null);
 
   return (
     <div className="px-4 py-4">
@@ -447,233 +303,6 @@ export default function TrackingPage() {
           </Button>
         )}
       </div>
-
-      {/* 🎯 오늘의 추천 출발 시간 - 핵심 기능 */}
-      {targets.length > 0 && (
-        <Card className="p-4 mb-4 bg-gradient-to-r from-primary/10 to-blue-500/10 border-primary/30">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <span className="text-2xl">🎯</span>
-              <div>
-                <h2 className="font-bold text-foreground">오늘의 추천 출발 시간</h2>
-                {recommendations?.today && (
-                  <p className="text-xs text-muted-foreground">
-                    {recommendations.today.date} ({recommendations.today.dayName}요일)
-                    {commuteSettings.enabled && commuteSettings.activeWindow !== 'all' && (
-                      <span className="ml-1 text-primary">• {getCurrentTimeWindow()}</span>
-                    )}
-                  </p>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowCommuteSettings(!showCommuteSettings)}
-                className={`p-1.5 rounded-md transition-colors ${
-                  showCommuteSettings || commuteSettings.enabled
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted hover:bg-muted/80'
-                }`}
-                title="출퇴근 시간대 설정"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </button>
-              <div className="flex items-center gap-1">
-                <span className="text-xs text-muted-foreground">여유</span>
-                <select
-                  value={bufferMinutes}
-                  onChange={(e) => handleBufferChange(parseInt(e.target.value))}
-                  className="text-xs border rounded px-1 py-0.5 bg-background"
-                >
-                  <option value={3}>3분</option>
-                  <option value={5}>5분</option>
-                  <option value={10}>10분</option>
-                  <option value={15}>15분</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {/* 출퇴근 시간대 설정 패널 */}
-          {showCommuteSettings && (
-            <div className="mb-4 p-3 bg-background/60 rounded-lg border border-border/50">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-medium text-foreground">출퇴근 시간대 필터</span>
-                <button
-                  onClick={() => handleCommuteSettingsChange({ enabled: !commuteSettings.enabled })}
-                  className={`relative w-10 h-5 rounded-full transition-colors ${
-                    commuteSettings.enabled ? 'bg-primary' : 'bg-muted'
-                  }`}
-                >
-                  <span
-                    className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
-                      commuteSettings.enabled ? 'translate-x-5' : 'translate-x-0.5'
-                    }`}
-                  />
-                </button>
-              </div>
-
-              {commuteSettings.enabled && (
-                <>
-                  {/* 시간대 선택 버튼 */}
-                  <div className="flex gap-2 mb-3">
-                    <button
-                      onClick={() => handleCommuteSettingsChange({ activeWindow: 'morning' })}
-                      className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
-                        commuteSettings.activeWindow === 'morning'
-                          ? 'bg-amber-500 text-white'
-                          : 'bg-muted hover:bg-muted/80'
-                      }`}
-                    >
-                      🌅 출근
-                    </button>
-                    <button
-                      onClick={() => handleCommuteSettingsChange({ activeWindow: 'evening' })}
-                      className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
-                        commuteSettings.activeWindow === 'evening'
-                          ? 'bg-orange-500 text-white'
-                          : 'bg-muted hover:bg-muted/80'
-                      }`}
-                    >
-                      🌆 퇴근
-                    </button>
-                    <button
-                      onClick={() => handleCommuteSettingsChange({ activeWindow: 'all' })}
-                      className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
-                        commuteSettings.activeWindow === 'all'
-                          ? 'bg-primary text-white'
-                          : 'bg-muted hover:bg-muted/80'
-                      }`}
-                    >
-                      전체
-                    </button>
-                  </div>
-
-                  {/* 시간대 설정 */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-xs text-muted-foreground">출근 시간대</label>
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="time"
-                          value={commuteSettings.morningStart}
-                          onChange={(e) => handleCommuteSettingsChange({ morningStart: e.target.value })}
-                          className="flex-1 text-xs border rounded px-2 py-1 bg-background"
-                        />
-                        <span className="text-xs text-muted-foreground">~</span>
-                        <input
-                          type="time"
-                          value={commuteSettings.morningEnd}
-                          onChange={(e) => handleCommuteSettingsChange({ morningEnd: e.target.value })}
-                          className="flex-1 text-xs border rounded px-2 py-1 bg-background"
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs text-muted-foreground">퇴근 시간대</label>
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="time"
-                          value={commuteSettings.eveningStart}
-                          onChange={(e) => handleCommuteSettingsChange({ eveningStart: e.target.value })}
-                          className="flex-1 text-xs border rounded px-2 py-1 bg-background"
-                        />
-                        <span className="text-xs text-muted-foreground">~</span>
-                        <input
-                          type="time"
-                          value={commuteSettings.eveningEnd}
-                          onChange={(e) => handleCommuteSettingsChange({ eveningEnd: e.target.value })}
-                          className="flex-1 text-xs border rounded px-2 py-1 bg-background"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <p className="text-xs text-muted-foreground mt-2">
-                    선택한 시간대의 기록만 분석하여 더 정확한 추천을 제공합니다.
-                  </p>
-                </>
-              )}
-            </div>
-          )}
-
-          {loadingRec ? (
-            <div className="flex justify-center py-6">
-              <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-            </div>
-          ) : hasRecommendations ? (
-            <div className="space-y-3">
-              {recommendations?.recommendations.filter(r => r.recommendation).map((rec) => (
-                <div
-                  key={rec.targetId}
-                  className="bg-background/80 rounded-lg p-3 border border-border/50"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-bold text-primary">{rec.busNo}</span>
-                        <span className="text-xs text-muted-foreground">@</span>
-                        <span className="text-sm text-muted-foreground truncate">{rec.stationName}</span>
-                      </div>
-
-                      {rec.recommendation && (
-                        <div className="flex items-baseline gap-3">
-                          <div>
-                            <p className="text-xs text-muted-foreground">출발</p>
-                            <p className="text-2xl font-bold text-primary">
-                              {rec.recommendation.departureTime}
-                            </p>
-                          </div>
-                          <span className="text-muted-foreground">→</span>
-                          <div>
-                            <p className="text-xs text-muted-foreground">도착예상</p>
-                            <p className="text-lg font-semibold text-foreground">
-                              {rec.recommendation.arrivalTime}
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="text-right">
-                      {rec.recommendation && getConfidenceBadge(rec.recommendation.confidence)}
-                      {rec.pattern && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          ±{rec.pattern.stdDevMinutes}분
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  {rec.recommendation && (
-                    <p className="text-xs text-muted-foreground mt-2 border-t border-border/30 pt-2">
-                      📊 {rec.recommendation.basis}
-                    </p>
-                  )}
-
-                  {rec.pattern && (
-                    <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
-                      <span>가장 빠름: {rec.pattern.earliestTime}</span>
-                      <span>가장 늦음: {rec.pattern.latestTime}</span>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-4">
-              <p className="text-sm text-muted-foreground">
-                📝 아직 충분한 도착 기록이 없습니다.
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                "도착 기록" 버튼을 눌러 데이터를 수집하면 추천이 활성화됩니다.
-              </p>
-            </div>
-          )}
-        </Card>
-      )}
 
       {/* 백그라운드 수집 상태 */}
       {bgCollecting && (
@@ -779,9 +408,7 @@ export default function TrackingPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {targets.map((target) => {
-            const rec = getRecommendation(target.id);
-            return (
+          {targets.map((target) => (
               <Card key={target.id} className="p-4">
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex-1">
@@ -820,16 +447,6 @@ export default function TrackingPage() {
                       <p className="text-xs text-muted-foreground mt-2">
                         도착 정보 없음
                       </p>
-                    )}
-
-                    {/* 추천 출발 시간 미니 */}
-                    {rec?.recommendation && (
-                      <div className="mt-2 px-2 py-1 bg-primary/5 rounded text-xs">
-                        <span className="text-muted-foreground">추천 출발 </span>
-                        <span className="font-bold text-primary">{rec.recommendation.departureTime}</span>
-                        <span className="text-muted-foreground"> → 도착 </span>
-                        <span className="font-semibold">{rec.recommendation.arrivalTime}</span>
-                      </div>
                     )}
                   </div>
 
@@ -888,8 +505,7 @@ export default function TrackingPage() {
                   </Button>
                 </div>
               </Card>
-            );
-          })}
+          ))}
         </div>
       )}
 
