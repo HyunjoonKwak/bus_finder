@@ -91,7 +91,7 @@ export interface MatchedArrival {
 
 // 분석 이슈 케이스
 export interface AnalysisIssue {
-  type: 'duplicate' | 'unmatched' | 'no_plate' | 'timeout';
+  type: 'duplicate' | 'unmatched' | 'no_plate' | 'timeout' | 'boundary' | 'diff_day';
   description: string;
   station: 'A' | 'B';
   plateNo?: string | null;
@@ -128,6 +128,8 @@ export interface PairAnalysis {
     duplicates: number;      // 중복 기록 수
     unmatched: number;       // 매칭 안 됨 (A에만 있고 B에 없음)
     noPlateNo: number;       // plate_no 없음
-    timeout: number;         // 시간 초과 (6시간 이상)
+    timeout: number;         // 시간 초과 (6시간 이상) - deprecated
+    boundary: number;        // 첫차/막차 (분석 제외)
+    diffDay: number;         // 다른 날 매칭 시도
   };
 }

@@ -397,10 +397,16 @@ export function PairAnalysisCard({ pair, days, onDelete }: PairAnalysisCardProps
                     <span>번호판 없음: {analysis.issuesSummary.noPlateNo}건</span>
                   </div>
                 )}
-                {analysis.issuesSummary.timeout > 0 && (
-                  <div className="flex items-center gap-1.5 text-orange-600 dark:text-orange-400">
-                    <span>⏱️</span>
-                    <span>시간 초과: {analysis.issuesSummary.timeout}건</span>
+                {analysis.issuesSummary.boundary > 0 && (
+                  <div className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400">
+                    <span>🚌</span>
+                    <span>첫차/막차: {analysis.issuesSummary.boundary}건</span>
+                  </div>
+                )}
+                {analysis.issuesSummary.diffDay > 0 && (
+                  <div className="flex items-center gap-1.5 text-purple-600 dark:text-purple-400">
+                    <span>📅</span>
+                    <span>다른 날: {analysis.issuesSummary.diffDay}건</span>
                   </div>
                 )}
               </div>
