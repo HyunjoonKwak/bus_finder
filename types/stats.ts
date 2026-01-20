@@ -89,6 +89,16 @@ export interface MatchedArrival {
   travelTimeMinutes: number;
 }
 
+// 분석 이슈 케이스
+export interface AnalysisIssue {
+  type: 'duplicate' | 'unmatched' | 'no_plate' | 'timeout';
+  description: string;
+  station: 'A' | 'B';
+  plateNo?: string | null;
+  arrivalTime: string;
+  details?: string;
+}
+
 export interface PairAnalysis {
   pairId: string;
   busNo: string;
@@ -111,4 +121,13 @@ export interface PairAnalysis {
 
   // 최근 매칭 기록
   recentMatches: MatchedArrival[];
+
+  // 분석 이슈 (디버깅용)
+  issues?: AnalysisIssue[];
+  issuesSummary?: {
+    duplicates: number;      // 중복 기록 수
+    unmatched: number;       // 매칭 안 됨 (A에만 있고 B에 없음)
+    noPlateNo: number;       // plate_no 없음
+    timeout: number;         // 시간 초과 (6시간 이상)
+  };
 }

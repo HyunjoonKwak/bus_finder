@@ -1,7 +1,10 @@
 import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { ApiErrors, successResponse } from '@/lib/api-response';
-import type { PairAnalysis, MatchedArrival } from '@/types/stats';
+import type { PairAnalysis, MatchedArrival, AnalysisIssue } from '@/types/stats';
+
+// 중복 판단 기준 (5분 이내 같은 plate_no)
+const DUPLICATE_THRESHOLD_MS = 5 * 60 * 1000;
 
 // 표준편차 계산
 function calculateStdDev(values: number[]): number | null {
@@ -78,17 +81,91 @@ export async function GET(request: NextRequest) {
   const arrivalsA = logsA || [];
   const arrivalsB = logsB || [];
 
-  // 4. plate_no로 매칭
+  // 4. plate_no로 매칭 + 이슈 기록
   const matchedArrivals: MatchedArrival[] = [];
   const matchedBIds = new Set<string>();
+  const matchedAIds = new Set<string>();
+  const issues: AnalysisIssue[] = [];
+  const maxWaitTime = 6 * 60 * 60 * 1000; // 6시간
 
+  // 4-1. 중복 기록 체크 (A 정류장)
+  for (let i = 0; i < arrivalsA.length; i++) {
+    const current = arrivalsA[i];
+    if (!current.plate_no) continue;
+
+    for (let j = i + 1; j < arrivalsA.length; j++) {
+      const next = arrivalsA[j];
+      if (current.plate_no !== next.plate_no) continue;
+
+      const timeDiff = new Date(next.arrival_time).getTime() - new Date(current.arrival_time).getTime();
+      if (timeDiff > 0 && timeDiff <= DUPLICATE_THRESHOLD_MS) {
+        issues.push({
+          type: 'duplicate',
+          description: `중복 기록: ${current.plate_no} (${Math.round(timeDiff / 1000)}초 간격)`,
+          station: 'A',
+          plateNo: current.plate_no,
+          arrivalTime: next.arrival_time,
+          details: `이전: ${current.arrival_time}`,
+        });
+      }
+    }
+  }
+
+  // 4-2. 중복 기록 체크 (B 정류장)
+  for (let i = 0; i < arrivalsB.length; i++) {
+    const current = arrivalsB[i];
+    if (!current.plate_no) continue;
+
+    for (let j = i + 1; j < arrivalsB.length; j++) {
+      const next = arrivalsB[j];
+      if (current.plate_no !== next.plate_no) continue;
+
+      const timeDiff = new Date(next.arrival_time).getTime() - new Date(current.arrival_time).getTime();
+      if (timeDiff > 0 && timeDiff <= DUPLICATE_THRESHOLD_MS) {
+        issues.push({
+          type: 'duplicate',
+          description: `중복 기록: ${current.plate_no} (${Math.round(timeDiff / 1000)}초 간격)`,
+          station: 'B',
+          plateNo: current.plate_no,
+          arrivalTime: next.arrival_time,
+          details: `이전: ${current.arrival_time}`,
+        });
+      }
+    }
+  }
+
+  // 4-3. plate_no 없음 체크
+  for (const arrivalA of arrivalsA) {
+    if (!arrivalA.plate_no) {
+      issues.push({
+        type: 'no_plate',
+        description: 'plate_no 없음',
+        station: 'A',
+        plateNo: null,
+        arrivalTime: arrivalA.arrival_time,
+      });
+    }
+  }
+
+  for (const arrivalB of arrivalsB) {
+    if (!arrivalB.plate_no) {
+      issues.push({
+        type: 'no_plate',
+        description: 'plate_no 없음',
+        station: 'B',
+        plateNo: null,
+        arrivalTime: arrivalB.arrival_time,
+      });
+    }
+  }
+
+  // 4-4. 매칭 시도
   for (const arrivalA of arrivalsA) {
     if (!arrivalA.plate_no) continue;
 
-    // A 도착 이후 B 도착 중에서 같은 plate_no 찾기
-    // (A 도착 후 6시간 이내의 B 도착만 유효 - 회차 노선 고려)
     const arrivalATime = new Date(arrivalA.arrival_time).getTime();
-    const maxWaitTime = 6 * 60 * 60 * 1000; // 6시간
+    let matched = false;
+    let closestTimeoutMatch: { arrivalB: typeof arrivalsB[0]; timeDiff: number } | null = null;
 
     for (const arrivalB of arrivalsB) {
       if (!arrivalB.plate_no) continue;
@@ -97,9 +174,10 @@ export async function GET(request: NextRequest) {
       const arrivalBTime = new Date(arrivalB.arrival_time).getTime();
       const timeDiff = arrivalBTime - arrivalATime;
 
-      // B가 A보다 늦고, 1시간 이내인 경우만 매칭
-      if (timeDiff > 0 && timeDiff <= maxWaitTime) {
-        if (arrivalA.plate_no === arrivalB.plate_no) {
+      // 같은 plate_no 찾기
+      if (arrivalA.plate_no === arrivalB.plate_no && timeDiff > 0) {
+        if (timeDiff <= maxWaitTime) {
+          // 정상 매칭
           const travelTimeMinutes = Math.round(timeDiff / (1000 * 60));
           matchedArrivals.push({
             plateNo: arrivalA.plate_no,
@@ -108,8 +186,41 @@ export async function GET(request: NextRequest) {
             travelTimeMinutes,
           });
           matchedBIds.add(arrivalB.id);
-          break; // 하나의 A에 대해 하나의 B만 매칭
+          matchedAIds.add(arrivalA.id);
+          matched = true;
+          break;
+        } else {
+          // 시간 초과 - 가장 가까운 것 기록
+          if (!closestTimeoutMatch || timeDiff < closestTimeoutMatch.timeDiff) {
+            closestTimeoutMatch = { arrivalB, timeDiff };
+          }
         }
+      }
+    }
+
+    // 매칭 안 됨 기록
+    if (!matched) {
+      if (closestTimeoutMatch) {
+        issues.push({
+          type: 'timeout',
+          description: `시간 초과: ${Math.round(closestTimeoutMatch.timeDiff / (1000 * 60))}분 (6시간 초과)`,
+          station: 'A',
+          plateNo: arrivalA.plate_no,
+          arrivalTime: arrivalA.arrival_time,
+          details: `B 도착: ${closestTimeoutMatch.arrivalB.arrival_time}`,
+        });
+      } else {
+        // B에서 같은 plate_no가 전혀 없음
+        const existsInB = arrivalsB.some((b) => b.plate_no === arrivalA.plate_no);
+        issues.push({
+          type: 'unmatched',
+          description: existsInB
+            ? 'B 도착 기록 있으나 시간 순서 불일치'
+            : 'B 정류장에 도착 기록 없음',
+          station: 'A',
+          plateNo: arrivalA.plate_no,
+          arrivalTime: arrivalA.arrival_time,
+        });
       }
     }
   }
@@ -118,6 +229,14 @@ export async function GET(request: NextRequest) {
   const travelTimes = matchedArrivals.map((m) => m.travelTimeMinutes);
   const arrivalsWithPlateNo = arrivalsA.filter((a) => a.plate_no).length;
   const missingAtB = arrivalsWithPlateNo - matchedArrivals.length;
+
+  // 이슈 요약
+  const issuesSummary = {
+    duplicates: issues.filter((i) => i.type === 'duplicate').length,
+    unmatched: issues.filter((i) => i.type === 'unmatched').length,
+    noPlateNo: issues.filter((i) => i.type === 'no_plate').length,
+    timeout: issues.filter((i) => i.type === 'timeout').length,
+  };
 
   const analysis: PairAnalysis = {
     pairId: pair.id,
@@ -145,6 +264,10 @@ export async function GET(request: NextRequest) {
 
     // 최근 매칭 기록 (최신 10개)
     recentMatches: matchedArrivals.slice(-10).reverse(),
+
+    // 분석 이슈 (최근 50개, 디버깅용)
+    issues: issues.slice(-50),
+    issuesSummary,
   };
 
   return successResponse({ analysis });
