@@ -6,6 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useBackgroundCollection } from '@/hooks/useBackgroundCollection';
+import { PairAnalysisCard } from '@/components/tracking/stats';
+import { PairSetupModal } from '@/components/tracking/PairSetupModal';
+import type { StationPair } from '@/types/stats';
 
 interface TrackingTarget {
   id: string;
@@ -59,6 +62,11 @@ export default function TrackingPage() {
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const targetsRef = useRef<TargetWithArrival[]>([]);
 
+  // 페어 관련 상태
+  const [pairs, setPairs] = useState<StationPair[]>([]);
+  const [pairsLoading, setPairsLoading] = useState(false);
+  const [pairModalOpen, setPairModalOpen] = useState(false);
+
   useEffect(() => {
     targetsRef.current = targets;
   }, [targets]);
@@ -91,6 +99,28 @@ export default function TrackingPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // 페어 목록 조회
+  const fetchPairs = useCallback(async () => {
+    try {
+      setPairsLoading(true);
+      const response = await fetch('/api/tracking/pairs');
+
+      if (response.ok) {
+        const data = await response.json();
+        setPairs(data.pairs || []);
+      }
+    } catch {
+      // 페어 로드 실패는 무시
+    } finally {
+      setPairsLoading(false);
+    }
+  }, []);
+
+  // 페어 삭제 핸들러
+  const handlePairDelete = (pairId: string) => {
+    setPairs((prev) => prev.filter((p) => p.id !== pairId));
   };
 
   const checkArrivals = useCallback(async () => {
@@ -202,11 +232,12 @@ export default function TrackingPage() {
 
   useEffect(() => {
     fetchTargets();
+    fetchPairs();
 
     if ('Notification' in window) {
       setNotificationEnabled(Notification.permission === 'granted');
     }
-  }, []);
+  }, [fetchPairs]);
 
   useEffect(() => {
     if (loading) return;
@@ -656,6 +687,60 @@ export default function TrackingPage() {
           })}
         </div>
       )}
+
+      {/* 페어 정류장 분석 */}
+      {targets.length > 0 && (
+        <div className="mt-6">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🔗</span>
+              <h2 className="font-semibold text-foreground">페어 정류장 분석</h2>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPairModalOpen(true)}
+            >
+              + 페어 추가
+            </Button>
+          </div>
+
+          {pairsLoading ? (
+            <Card className="p-4">
+              <div className="flex justify-center py-4">
+                <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              </div>
+            </Card>
+          ) : pairs.length === 0 ? (
+            <Card className="p-4">
+              <div className="text-center py-6 text-muted-foreground">
+                <p className="text-sm">설정된 페어 정류장이 없습니다.</p>
+                <p className="text-xs mt-1">
+                  페어를 추가하면 두 정류장 간 소요시간을 분석할 수 있습니다.
+                </p>
+              </div>
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {pairs.map((pair) => (
+                <PairAnalysisCard
+                  key={pair.id}
+                  pair={pair}
+                  days={30}
+                  onDelete={handlePairDelete}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 페어 설정 모달 */}
+      <PairSetupModal
+        isOpen={pairModalOpen}
+        onClose={() => setPairModalOpen(false)}
+        onSuccess={fetchPairs}
+      />
 
       {/* 도움말 */}
       <p className="text-xs text-muted-foreground text-center mt-6">
