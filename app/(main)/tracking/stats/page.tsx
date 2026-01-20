@@ -180,12 +180,63 @@ function StatsContent() {
     );
   }
 
+  // 스켈레톤 UI 로딩
   if (loading) {
     return (
-      <div className="px-4 py-4">
-        <div className="flex justify-center py-16">
-          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      <div className="px-4 py-4" role="status" aria-label="통계 데이터 로딩 중">
+        {/* 헤더 스켈레톤 */}
+        <div className="flex items-center mb-4">
+          <div className="w-20 h-5 bg-muted animate-pulse rounded" />
         </div>
+        <div className="mb-4">
+          <div className="w-32 h-6 bg-muted animate-pulse rounded mb-1" />
+          <div className="w-24 h-4 bg-muted animate-pulse rounded" />
+        </div>
+
+        {/* 기간 선택 스켈레톤 */}
+        <div className="flex gap-2 mb-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="w-12 h-8 bg-muted animate-pulse rounded" />
+          ))}
+        </div>
+
+        {/* 요약 카드 스켈레톤 */}
+        <Card className="p-4 mb-4">
+          <div className="w-16 h-5 bg-muted animate-pulse rounded mb-3" />
+          <div className="grid grid-cols-2 gap-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="text-center">
+                <div className="w-16 h-8 bg-muted animate-pulse rounded mx-auto mb-1" />
+                <div className="w-12 h-3 bg-muted animate-pulse rounded mx-auto" />
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        {/* 차트 스켈레톤 */}
+        <Card className="p-4 mb-4">
+          <div className="w-32 h-5 bg-muted animate-pulse rounded mb-3" />
+          <div className="space-y-3">
+            {[1, 2, 3, 4, 5, 6, 7].map((i) => (
+              <div key={i} className="flex items-center gap-3">
+                <div className="w-6 h-4 bg-muted animate-pulse rounded" />
+                <div className="flex-1 h-2 bg-muted animate-pulse rounded" style={{ width: `${Math.random() * 50 + 30}%` }} />
+                <div className="w-16 h-4 bg-muted animate-pulse rounded" />
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        {/* 시간대별 차트 스켈레톤 */}
+        <Card className="p-4">
+          <div className="w-32 h-5 bg-muted animate-pulse rounded mb-3" />
+          <div className="flex items-end h-32 gap-1">
+            {Array.from({ length: 24 }, (_, i) => (
+              <div key={i} className="flex-1 bg-muted animate-pulse rounded-t" style={{ height: `${Math.random() * 80 + 10}%` }} />
+            ))}
+          </div>
+        </Card>
+        <span className="sr-only">데이터를 불러오는 중입니다</span>
       </div>
     );
   }
@@ -244,13 +295,22 @@ function StatsContent() {
       </div>
 
       {/* 기간 선택 */}
-      <div className="flex gap-2 mb-4">
+      <nav className="flex gap-2 mb-4" role="tablist" aria-label="조회 기간 선택">
         {[7, 14, 30, 90].map((d) => (
-          <Button key={d} variant={days === d ? 'default' : 'outline'} size="sm" onClick={() => setDays(d)}>
+          <Button
+            key={d}
+            variant={days === d ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setDays(d)}
+            role="tab"
+            aria-selected={days === d}
+            aria-label={`최근 ${d}일 데이터 조회`}
+            className="min-w-[44px] min-h-[44px]"
+          >
             {d}일
           </Button>
         ))}
-      </div>
+      </nav>
 
       {!stats || stats.totalCount === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -262,25 +322,25 @@ function StatsContent() {
       ) : (
         <div className="space-y-4">
           {/* 요약 */}
-          <Card className="p-4">
-            <h2 className="font-semibold text-foreground mb-3">요약</h2>
-            <div className="grid grid-cols-2 gap-4 text-center">
-              <div>
-                <p className="text-2xl font-bold text-primary">{stats.totalCount}</p>
+          <Card className="p-4" role="region" aria-labelledby="summary-heading">
+            <h2 id="summary-heading" className="font-semibold text-foreground mb-3">요약</h2>
+            <div className="grid grid-cols-2 gap-4 text-center" role="list">
+              <div role="listitem" aria-label={`총 기록 ${stats.totalCount}회`}>
+                <p className="text-2xl font-bold text-primary" aria-hidden="true">{stats.totalCount}</p>
                 <p className="text-xs text-muted-foreground">총 기록</p>
               </div>
-              <div>
-                <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+              <div role="listitem" aria-label={`평균 배차간격 ${stats.avgInterval ? `${stats.avgInterval}분` : '데이터 없음'}`}>
+                <p className="text-2xl font-bold text-green-600 dark:text-green-400" aria-hidden="true">
                   {stats.avgInterval ? `${stats.avgInterval}분` : '-'}
                 </p>
                 <p className="text-xs text-muted-foreground">평균 배차간격</p>
               </div>
-              <div>
-                <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{stats.firstArrival || '-'}</p>
+              <div role="listitem" aria-label={`가장 이른 도착 ${stats.firstArrival || '데이터 없음'}`}>
+                <p className="text-2xl font-bold text-blue-600 dark:text-blue-400" aria-hidden="true">{stats.firstArrival || '-'}</p>
                 <p className="text-xs text-muted-foreground">가장 이른 도착</p>
               </div>
-              <div>
-                <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">{stats.lastArrival || '-'}</p>
+              <div role="listitem" aria-label={`가장 늦은 도착 ${stats.lastArrival || '데이터 없음'}`}>
+                <p className="text-2xl font-bold text-orange-600 dark:text-orange-400" aria-hidden="true">{stats.lastArrival || '-'}</p>
                 <p className="text-xs text-muted-foreground">가장 늦은 도착</p>
               </div>
             </div>
@@ -342,9 +402,9 @@ function StatsContent() {
 
           {/* 요일별 통계 */}
           {stats.byDay.length > 0 && (
-            <Card className="p-4">
-              <h2 className="font-semibold text-foreground mb-3">요일별 평균 도착 시간</h2>
-              <div className="space-y-2">
+            <Card className="p-4" role="region" aria-labelledby="day-chart-heading">
+              <h2 id="day-chart-heading" className="font-semibold text-foreground mb-3">요일별 평균 도착 시간</h2>
+              <div className="space-y-2" role="list" aria-label="요일별 평균 도착 시간 목록">
                 {stats.byDay.map((day) => {
                   const maxCount = Math.max(...stats.byDay.map((d) => d.count));
                   const barWidth = maxCount > 0 ? (day.count / maxCount) * 100 : 0;
@@ -353,9 +413,14 @@ function StatsContent() {
                   const timePosition = avgMinutes !== null ? ((avgMinutes - 300) / (1440 - 300)) * 100 : null; // 5:00=300분, 24:00=1440분
 
                   return (
-                    <div key={day.day} className="flex items-center justify-between py-2 border-b border-border last:border-0">
-                      <span className="font-medium text-foreground w-8">{day.dayName}</span>
-                      <div className="flex-1 mx-4 relative">
+                    <div
+                      key={day.day}
+                      className="flex items-center justify-between py-2 border-b border-border last:border-0"
+                      role="listitem"
+                      aria-label={`${day.dayName}요일: ${day.avgTime ? `평균 ${day.avgTime}` : '기록 없음'}, ${day.count}회 기록`}
+                    >
+                      <span className="font-medium text-foreground w-8" aria-hidden="true">{day.dayName}</span>
+                      <div className="flex-1 mx-4 relative" aria-hidden="true">
                         {/* 배경 바 (기록 수 기준) */}
                         <div
                           className="bg-primary/20 rounded-full h-2"
@@ -366,11 +431,10 @@ function StatsContent() {
                           <div
                             className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-primary rounded-full border-2 border-background shadow-sm"
                             style={{ left: `${Math.max(5, Math.min(95, timePosition))}%` }}
-                            title={`평균 ${day.avgTime}`}
                           />
                         )}
                       </div>
-                      <div className="text-right min-w-[80px]">
+                      <div className="text-right min-w-[80px]" aria-hidden="true">
                         {day.avgTime ? (
                           <span className="font-semibold text-primary">{day.avgTime}</span>
                         ) : (
@@ -388,26 +452,30 @@ function StatsContent() {
 
           {/* 시간대별 분포 */}
           {stats.byHour.length > 0 && (
-            <Card className="p-4">
-              <h2 className="font-semibold text-foreground mb-3">시간대별 도착 분포</h2>
-              <div className="flex items-end h-32 gap-1 relative">
+            <Card className="p-4" role="region" aria-labelledby="hour-chart-heading">
+              <h2 id="hour-chart-heading" className="font-semibold text-foreground mb-3">시간대별 도착 분포</h2>
+              <div className="flex items-end h-32 gap-0.5 sm:gap-1 relative" role="img" aria-label="시간대별 도착 분포 막대 그래프">
                 {stats.byHour.map((hour) => {
                   const maxCount = Math.max(...stats.byHour.map((h) => h.count));
                   const height = maxCount > 0 ? (hour.count / maxCount) * 100 : 0;
                   const isHovered = hoveredHour === hour.hour;
 
                   return (
-                    <div
+                    <button
                       key={hour.hour}
-                      className="flex-1 flex flex-col items-center relative"
+                      type="button"
+                      className="flex-1 flex flex-col items-center relative min-w-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded"
                       onMouseEnter={() => setHoveredHour(hour.hour)}
                       onMouseLeave={() => setHoveredHour(null)}
+                      onFocus={() => setHoveredHour(hour.hour)}
+                      onBlur={() => setHoveredHour(null)}
                       onTouchStart={() => setHoveredHour(hour.hour)}
-                      onTouchEnd={() => setHoveredHour(null)}
+                      onTouchEnd={() => setTimeout(() => setHoveredHour(null), 1500)}
+                      aria-label={`${hour.hour}시: ${hour.count}회 도착`}
                     >
                       {/* 툴팁 */}
                       {isHovered && hour.count > 0 && (
-                        <div className="absolute bottom-full mb-2 px-2 py-1 bg-foreground text-background text-xs rounded shadow-lg whitespace-nowrap z-10">
+                        <div className="absolute bottom-full mb-2 px-2 py-1 bg-foreground text-background text-xs rounded shadow-lg whitespace-nowrap z-10 pointer-events-none" role="tooltip">
                           {hour.hour}시: {hour.count}회
                         </div>
                       )}
@@ -420,33 +488,40 @@ function StatsContent() {
                             : 'bg-muted'
                         }`}
                         style={{ height: `${Math.max(height, 2)}%` }}
+                        aria-hidden="true"
                       />
                       {hour.hour % 3 === 0 && (
-                        <span className="text-xs text-muted-foreground mt-1">{hour.hour}</span>
+                        <span className="text-[10px] sm:text-xs text-muted-foreground mt-1" aria-hidden="true">{hour.hour}</span>
                       )}
-                    </div>
+                    </button>
                   );
                 })}
+              </div>
+              {/* 스크린 리더용 요약 */}
+              <div className="sr-only">
+                가장 많은 도착: {stats.byHour.reduce((max, h) => h.count > max.count ? h : max, stats.byHour[0]).hour}시에 {stats.byHour.reduce((max, h) => h.count > max.count ? h : max, stats.byHour[0]).count}회
               </div>
             </Card>
           )}
 
           {/* 최근 기록 */}
-          <Card className="p-4">
+          <Card className="p-4" role="region" aria-labelledby="logs-heading">
             <div className="flex items-center justify-between mb-3">
               <div>
-                <h2 className="font-semibold text-foreground">도착 기록</h2>
+                <h2 id="logs-heading" className="font-semibold text-foreground">도착 기록</h2>
                 {pagination && (
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground" aria-live="polite">
                     {pagination.totalLogs}건 중 {(currentPage - 1) * logsPerPage + 1}-{Math.min(currentPage * logsPerPage, pagination.totalLogs)}
                   </p>
                 )}
               </div>
               <button
                 onClick={() => setEditMode(!editMode)}
-                className={`text-sm px-2 py-1 rounded transition-colors ${
-                  editMode ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+                className={`text-sm px-3 py-2 rounded transition-colors min-w-[44px] min-h-[44px] ${
+                  editMode ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                 }`}
+                aria-pressed={editMode}
+                aria-label={editMode ? '편집 모드 종료' : '편집 모드 시작'}
               >
                 {editMode ? '완료' : '편집'}
               </button>
@@ -462,13 +537,13 @@ function StatsContent() {
                         <button
                           onClick={() => handleDeleteLog(log.id)}
                           disabled={isDeleting}
-                          className="p-1 text-destructive hover:bg-destructive/10 rounded transition-colors disabled:opacity-50"
-                          title="삭제"
+                          className="p-2 text-destructive hover:bg-destructive/10 rounded transition-colors disabled:opacity-50 min-w-[44px] min-h-[44px] flex items-center justify-center"
+                          aria-label={`${date.toLocaleDateString('ko-KR')} 도착 기록 삭제`}
                         >
                           {isDeleting ? (
-                            <div className="w-4 h-4 border-2 border-destructive border-t-transparent rounded-full animate-spin" />
+                            <div className="w-5 h-5 border-2 border-destructive border-t-transparent rounded-full animate-spin" aria-label="삭제 중" />
                           ) : (
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                             </svg>
                           )}
@@ -494,12 +569,13 @@ function StatsContent() {
 
             {/* 페이지네이션 */}
             {pagination && pagination.totalPages > 1 && (
-              <div className="mt-4 pt-4 border-t border-border">
-                <div className="flex items-center justify-center gap-1">
+              <nav className="mt-4 pt-4 border-t border-border" role="navigation" aria-label="도착 기록 페이지네이션">
+                <div className="flex items-center justify-center gap-1 sm:gap-2">
                   <button
                     onClick={() => goToPage(currentPage - 1)}
                     disabled={currentPage === 1 || logsLoading}
-                    className="px-3 py-1.5 text-sm rounded border border-border hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-3 py-2 text-sm rounded border border-border hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
+                    aria-label="이전 페이지"
                   >
                     이전
                   </button>
@@ -509,30 +585,33 @@ function StatsContent() {
                         key={idx}
                         onClick={() => goToPage(pageNum)}
                         disabled={logsLoading}
-                        className={`w-8 h-8 text-sm rounded ${
+                        className={`min-w-[44px] min-h-[44px] text-sm rounded ${
                           pageNum === currentPage ? 'bg-primary text-primary-foreground' : 'border border-border hover:bg-muted'
                         } disabled:opacity-50`}
+                        aria-label={`${pageNum} 페이지${pageNum === currentPage ? ' (현재 페이지)' : ''}`}
+                        aria-current={pageNum === currentPage ? 'page' : undefined}
                       >
                         {pageNum}
                       </button>
                     ) : (
-                      <span key={idx} className="px-1 text-muted-foreground">...</span>
+                      <span key={idx} className="px-1 text-muted-foreground" aria-hidden="true">...</span>
                     )
                   )}
                   <button
                     onClick={() => goToPage(currentPage + 1)}
                     disabled={currentPage === pagination.totalPages || logsLoading}
-                    className="px-3 py-1.5 text-sm rounded border border-border hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-3 py-2 text-sm rounded border border-border hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
+                    aria-label="다음 페이지"
                   >
                     다음
                   </button>
                 </div>
                 {logsLoading && (
-                  <div className="flex justify-center mt-2">
+                  <div className="flex justify-center mt-2" role="status" aria-label="로딩 중">
                     <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                   </div>
                 )}
-              </div>
+              </nav>
             )}
           </Card>
         </div>
