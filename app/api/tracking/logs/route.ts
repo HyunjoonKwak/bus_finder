@@ -97,6 +97,8 @@ export async function POST(request: NextRequest) {
 }
 
 // DELETE: 버스 도착 로그 삭제
+// - id: 단일 로그 삭제
+// - date + bus_id + station_id: 특정 날짜의 모든 로그 삭제
 export async function DELETE(request: NextRequest) {
   const supabase = await createClient();
 
@@ -110,9 +112,41 @@ export async function DELETE(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
+  const date = searchParams.get('date');
+  const bus_id = searchParams.get('bus_id');
+  const station_id = searchParams.get('station_id');
 
+  // 날짜별 삭제
+  if (date && bus_id && station_id) {
+    const targetDate = new Date(date);
+    const startOfDay = new Date(targetDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(targetDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const { data: deletedLogs, error } = await supabase
+      .from('bus_arrival_logs')
+      .delete()
+      .eq('user_id', user.id)
+      .eq('bus_id', bus_id)
+      .eq('station_id', station_id)
+      .gte('arrival_time', startOfDay.toISOString())
+      .lte('arrival_time', endOfDay.toISOString())
+      .select('id');
+
+    if (error) {
+      return ApiErrors.internalError('날짜별 로그 삭제에 실패했습니다.', error.message);
+    }
+
+    return successResponse({
+      success: true,
+      deletedCount: deletedLogs?.length || 0
+    });
+  }
+
+  // 단일 로그 삭제
   if (!id) {
-    return ApiErrors.badRequest('로그 ID가 필요합니다.');
+    return ApiErrors.badRequest('로그 ID 또는 날짜 정보가 필요합니다.');
   }
 
   const { error } = await supabase

@@ -74,6 +74,31 @@ function StatsContent() {
     }
   };
 
+  // 날짜별 도착 기록 삭제
+  const handleDeleteByDate = async (date: string) => {
+    try {
+      const params = new URLSearchParams({
+        date,
+        bus_id: busId!,
+        station_id: stationId!,
+      });
+      const response = await fetch(`/api/tracking/logs?${params}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        await refreshStats();
+        alert(`${data.deletedCount}건의 기록이 삭제되었습니다.`);
+      } else {
+        const data = await response.json();
+        alert(`삭제 실패: ${data.error}`);
+      }
+    } catch {
+      alert('삭제 중 오류가 발생했습니다.');
+    }
+  };
+
   // CSV 내보내기
   const handleExportCSV = async () => {
     if (!stats || !busId || !stationId) return;
@@ -210,8 +235,11 @@ function StatsContent() {
             editMode={editMode}
             deletingId={deletingId}
             logsLoading={logsLoading}
+            busId={busId}
+            stationId={stationId}
             onToggleEditMode={() => setEditMode(!editMode)}
             onDeleteLog={handleDeleteLog}
+            onDeleteByDate={handleDeleteByDate}
             onPageChange={goToPage}
           />
         </div>
