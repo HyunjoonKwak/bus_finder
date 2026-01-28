@@ -21,8 +21,8 @@ services:
       - TRAFFIC_API_KEY=${TRAFFIC_API_KEY}
       - TZ=Asia/Seoul
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
-      interval: 30s
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:3000/api/cron/scheduler"]
+      interval: 60s
       timeout: 10s
       retries: 3
       start_period: 40s
