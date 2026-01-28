@@ -703,6 +703,9 @@ export default function TrackingPage() {
                 onChange={(e) => setPairDays(parseInt(e.target.value))}
                 className="text-xs border rounded px-2 py-1 bg-background"
               >
+                <option value={1}>최근 1일</option>
+                <option value={2}>최근 2일</option>
+                <option value={3}>최근 3일</option>
                 <option value={7}>최근 7일</option>
                 <option value={14}>최근 14일</option>
                 <option value={30}>최근 30일</option>
