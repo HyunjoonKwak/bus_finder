@@ -46,14 +46,15 @@ export function ArrivalLogsList({
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
   const [deletingDate, setDeletingDate] = useState<string | null>(null);
 
-  // 날짜별로 그룹화
+  // 날짜별로 그룹화 (KST 기준)
   const groupedByDate = useMemo(() => {
     const groups: DateGroup[] = [];
     const dateMap = new Map<string, ArrivalLog[]>();
 
     logs.forEach((log) => {
       const date = new Date(log.arrival_time);
-      const dateKey = date.toISOString().split('T')[0];
+      // KST 기준 날짜 키 생성 (UTC+9)
+      const dateKey = date.toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' });
 
       if (!dateMap.has(dateKey)) {
         dateMap.set(dateKey, []);
@@ -62,14 +63,18 @@ export function ArrivalLogsList({
     });
 
     dateMap.forEach((dateLogs, dateKey) => {
-      const date = new Date(dateKey);
+      // dateKey는 'YYYY-MM-DD' 형식 (KST 기준)
+      const [year, month, day] = dateKey.split('-').map(Number);
+      // KST 기준 날짜 객체 생성 (표시용)
+      const displayDate = new Date(year, month - 1, day);
+
       groups.push({
         date: dateKey,
-        dateLabel: date.toLocaleDateString('ko-KR', {
+        dateLabel: displayDate.toLocaleDateString('ko-KR', {
           month: 'long',
           day: 'numeric',
         }),
-        weekday: date.toLocaleDateString('ko-KR', { weekday: 'short' }),
+        weekday: displayDate.toLocaleDateString('ko-KR', { weekday: 'short' }),
         logs: dateLogs.sort(
           (a, b) =>
             new Date(b.arrival_time).getTime() - new Date(a.arrival_time).getTime()

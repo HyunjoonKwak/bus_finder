@@ -116,13 +116,16 @@ export async function DELETE(request: NextRequest) {
   const bus_id = searchParams.get('bus_id');
   const station_id = searchParams.get('station_id');
 
-  // 날짜별 삭제
+  // 날짜별 삭제 (KST 기준)
   if (date && bus_id && station_id) {
-    const targetDate = new Date(date);
-    const startOfDay = new Date(targetDate);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(targetDate);
-    endOfDay.setHours(23, 59, 59, 999);
+    // date는 'YYYY-MM-DD' 형식의 KST 기준 날짜
+    // KST 00:00:00 = UTC 전날 15:00:00 (UTC+9)
+    // KST 23:59:59 = UTC 당일 14:59:59
+    const [year, month, day] = date.split('-').map(Number);
+
+    // KST 기준 시작/종료 시간을 UTC로 변환
+    const startOfDayKST = new Date(Date.UTC(year, month - 1, day, -9, 0, 0, 0)); // KST 00:00 = UTC -9시간
+    const endOfDayKST = new Date(Date.UTC(year, month - 1, day, 14, 59, 59, 999)); // KST 23:59:59 = UTC +14:59:59
 
     const { data: deletedLogs, error } = await supabase
       .from('bus_arrival_logs')
@@ -130,8 +133,8 @@ export async function DELETE(request: NextRequest) {
       .eq('user_id', user.id)
       .eq('bus_id', bus_id)
       .eq('station_id', station_id)
-      .gte('arrival_time', startOfDay.toISOString())
-      .lte('arrival_time', endOfDay.toISOString())
+      .gte('arrival_time', startOfDayKST.toISOString())
+      .lte('arrival_time', endOfDayKST.toISOString())
       .select('id');
 
     if (error) {
