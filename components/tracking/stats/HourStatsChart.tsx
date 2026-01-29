@@ -91,12 +91,17 @@ export function HourStatsChart({ byHour }: HourStatsChartProps) {
 
       {/* 막대 그래프 */}
       <div
-        className="flex items-end h-32 gap-0.5 sm:gap-1 relative"
+        className="flex items-end gap-0.5 sm:gap-1 relative"
+        style={{ height: '128px' }}
         role="img"
         aria-label="시간대별 도착 분포 막대 그래프"
       >
         {byHour.map((hour) => {
-          const height = maxCount > 0 ? (hour.count / maxCount) * 100 : 0;
+          // 픽셀 단위로 높이 계산 (최대 120px, 최소 4px)
+          const barMaxHeight = 120;
+          const barHeight = maxCount > 0
+            ? Math.max((hour.count / maxCount) * barMaxHeight, hour.count > 0 ? 8 : 4)
+            : 4;
           const isHovered = hoveredHour === hour.hour;
           const isPeak = peakHours.some((p) => p.hour === hour.hour);
 
@@ -104,7 +109,7 @@ export function HourStatsChart({ byHour }: HourStatsChartProps) {
             <button
               key={hour.hour}
               type="button"
-              className="flex-1 flex flex-col items-center relative min-w-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded"
+              className="flex-1 flex flex-col items-center justify-end relative min-w-0 h-full focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded"
               onMouseEnter={() => setHoveredHour(hour.hour)}
               onMouseLeave={() => setHoveredHour(null)}
               onFocus={() => setHoveredHour(hour.hour)}
@@ -135,20 +140,28 @@ export function HourStatsChart({ byHour }: HourStatsChartProps) {
                         : 'bg-primary'
                     : 'bg-muted/50'
                 }`}
-                style={{ height: `${Math.max(height, 3)}%` }}
+                style={{ height: `${barHeight}px` }}
                 aria-hidden="true"
               />
-              {hour.hour % 3 === 0 && (
-                <span
-                  className="text-[10px] sm:text-xs text-muted-foreground mt-1"
-                  aria-hidden="true"
-                >
-                  {hour.hour}
-                </span>
-              )}
             </button>
           );
         })}
+      </div>
+
+      {/* 시간 레이블 */}
+      <div className="flex gap-0.5 sm:gap-1 mt-1">
+        {byHour.map((hour) => (
+          <div key={hour.hour} className="flex-1 text-center min-w-0">
+            {hour.hour % 3 === 0 && (
+              <span
+                className="text-[10px] sm:text-xs text-muted-foreground"
+                aria-hidden="true"
+              >
+                {hour.hour}
+              </span>
+            )}
+          </div>
+        ))}
       </div>
 
       {/* 요약 정보 */}
